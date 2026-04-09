@@ -299,13 +299,11 @@ const params = {
   blinkInterval: 3.0,
 };
 
-// ── Eye geometry ──
-const EYE = {
-  cx: canvas.width  / 2,
-  cy: canvas.height / 2,
-  rx: 110,   // horizontal radius
-  ry: 75,    // vertical radius
-};
+// ── Eye geometry (left, right) ──
+const EYES = [
+  { cx: 175, cy: 250, rx: 100, ry: 70 },
+  { cx: 425, cy: 250, rx: 100, ry: 70 },
+];
 
 // ── Easing functions ──
 const ease = {
@@ -537,28 +535,22 @@ function update(dt) {
 //  DRAW
 // ─────────────────────────────────────────────
 
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+function drawEye(eye) {
+  const { cx, cy, rx, ry } = eye;
   const beh = getBehavior();
-  const cx = EYE.cx, cy = EYE.cy;
-  const rx = EYE.rx, ry = EYE.ry;
 
-  // Pupil offset
   const pupilX = cx + state.gazeX * (rx * 0.45);
   const pupilY = cy + state.gazeY * (ry * 0.45);
 
-  // Lid openness
   const targetOpen = beh.lidOpenness();
-  const blinkClose = state.blink.t;
-  const openness   = targetOpen * (1 - blinkClose);
+  const openness   = targetOpen * (1 - state.blink.t);
 
   // ── Glow ──
   const glow = ctx.createRadialGradient(cx, cy, 10, cx, cy, rx * 1.4);
   glow.addColorStop(0, 'rgba(74,247,196,0.06)');
   glow.addColorStop(1, 'rgba(74,247,196,0)');
   ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(cx - rx * 1.6, cy - ry * 2, rx * 3.2, ry * 4);
 
   // ── Clip to eye shape ──
   ctx.save();
@@ -662,8 +654,15 @@ function draw() {
     ctx.stroke();
     ctx.restore();
   }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  EYES.forEach(eye => drawEye(eye));
 
   // ── Behavior label ──
+  const beh = getBehavior();
   ctx.font = '700 10px Space Mono';
   ctx.fillStyle = 'rgba(74,247,196,0.4)';
   ctx.letterSpacing = '0.2em';
@@ -701,8 +700,9 @@ canvas.addEventListener('click', e => {
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
-  const nx = (mx - EYE.cx) / (EYE.rx * 0.9);
-  const ny = (my - EYE.cy) / (EYE.ry * 0.9);
+  // Map relative to canvas center so both eyes look toward the click
+  const nx = (mx - canvas.width  / 2) / (canvas.width  / 2 * 0.9);
+  const ny = (my - canvas.height / 2) / (canvas.height / 2 * 0.9);
   const tx = Math.max(-0.9, Math.min(0.9, nx));
   const ty = Math.max(-0.7, Math.min(0.7, ny));
   triggerSaccade(tx, ty);
