@@ -82,6 +82,7 @@ header span {
   background: var(--bg);
   position: relative;
   overflow: hidden;
+  min-height: 0;
 }
 
 .stage::before {
@@ -94,6 +95,8 @@ header span {
 
 canvas {
   cursor: crosshair;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 /* CONTROL PANEL */
@@ -416,6 +419,7 @@ const params = {
 
 // ── Color params ──
 const colors = {
+  stageBg:       '#0a0a0f',
   canvasBg:      '#000000',
   irisHighlight: '#5fffd8',
   irisMid:       '#2abf8e',
@@ -869,7 +873,7 @@ function toggleAcc(id) {
   document.getElementById(id).classList.toggle('open');
 }
 
-function makeColorRow(key, label) {
+function makeColorRow(key, label, onChange) {
   const row = document.createElement('div');
   row.className = 'color-row';
   const lbl = document.createElement('label');
@@ -883,6 +887,7 @@ function makeColorRow(key, label) {
   inp.addEventListener('input', () => {
     colors[key] = inp.value;
     hex.textContent = inp.value;
+    if (onChange) onChange(inp.value);
   });
   row.appendChild(lbl);
   row.appendChild(inp);
@@ -893,16 +898,19 @@ function makeColorRow(key, label) {
 function buildColorPanel() {
   const panel = document.getElementById('panel-colors');
   panel.innerHTML = '';
+  const stage = document.querySelector('.stage');
   [
-    ['canvasBg',      'Canvas bg'],
-    ['irisHighlight', 'Iris highlight'],
-    ['irisMid',       'Iris mid'],
-    ['irisDeep',      'Iris deep'],
-    ['glowColor',     'Glow'],
-    ['scleraLight',   'Sclera light'],
-    ['scleraDark',    'Sclera dark'],
-    ['pupilColor',    'Pupil'],
-  ].forEach(([key, label]) => panel.appendChild(makeColorRow(key, label)));
+    ['stageBg',       'Stage bg',  v => stage.style.background = v],
+    ['canvasBg',      'Canvas bg', null],
+    ['irisHighlight', 'Iris highlight', null],
+    ['irisMid',       'Iris mid',       null],
+    ['irisDeep',      'Iris deep',      null],
+    ['glowColor',     'Glow',           null],
+    ['scleraLight',   'Sclera light',   null],
+    ['scleraDark',    'Sclera dark',    null],
+    ['pupilColor',    'Pupil',          null],
+  ].forEach(([key, label, onChange]) => panel.appendChild(makeColorRow(key, label, onChange)));
+  stage.style.background = colors.stageBg;
 }
 
 function exportConfig() {
