@@ -8,7 +8,6 @@
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
 
-```
 :root {
   --bg: #0a0a0f;
   --surface: #12121a;
@@ -275,7 +274,6 @@ textarea.json-area {
 .error-msg { color: var(--accent); font-size: 9px; margin-top: 4px; }
 .btn-row { display: flex; gap: 6px; margin-top: 8px; }
 .btn-row button { flex: 1; font-size: 9px; padding: 8px; }
-```
 
   </style>
 </head>
@@ -287,7 +285,7 @@ textarea.json-area {
 </header>
 
 <div class="stage">
-  <canvas id="canvas" width="800" height="800"></canvas>
+  <canvas id="canvas" width="600" height="600"></canvas>
 </div>
 
 <div class="panel">
@@ -437,8 +435,8 @@ function hexToRgba(hex, alpha) {
 
 // ── Eye geometry (left, right) ──
 const EYES = [
-  { cx: 269, cy: 400, rx: 83, ry: 56 },
-  { cx: 531, cy: 400, rx: 83, ry: 56 },
+  { cx: 190, cy: 300, rx: 83, ry: 56 },
+  { cx: 410, cy: 300, rx: 83, ry: 56 },
 ];
 
 // ── Easing functions ──
