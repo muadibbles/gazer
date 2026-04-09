@@ -437,8 +437,8 @@ function hexToRgba(hex, alpha) {
 
 // ── Eye geometry (left, right) ──
 const EYES = [
-  { cx: 225, cy: 400, rx: 110, ry: 75 },
-  { cx: 575, cy: 400, rx: 110, ry: 75 },
+  { cx: 269, cy: 400, rx: 83, ry: 56 },
+  { cx: 531, cy: 400, rx: 83, ry: 56 },
 ];
 
 // ── Easing functions ──
@@ -952,6 +952,7 @@ function applyLoadedConfig() {
     if (el) {
       el.value = params[key];
       document.getElementById(valId).textContent = parseFloat(params[key]).toFixed(2);
+      refreshSlider(el);
     }
   });
   buildColorPanel();
@@ -971,9 +972,17 @@ function setBehavior(name) {
   logEvent(`behavior → ${name}`);
 }
 
+function refreshSlider(el) {
+  const min = parseFloat(el.min);
+  const max = parseFloat(el.max);
+  const pct = ((parseFloat(el.value) - min) / (max - min)) * 100;
+  el.style.background = `linear-gradient(to right, var(--iris) ${pct}%, #3a3a5c ${pct}%)`;
+}
+
 function updateParam(key, value, labelId) {
   params[key] = parseFloat(value);
   document.getElementById(labelId).textContent = parseFloat(value).toFixed(2);
+  refreshSlider(event.target);
 }
 
 const logEl = document.getElementById('log');
@@ -989,6 +998,7 @@ function logEvent(msg) {
 }
 
 buildColorPanel();
+document.querySelectorAll('input[type="range"]').forEach(refreshSlider);
 logEvent('system ready');
 logEvent('behavior → idle');
 
