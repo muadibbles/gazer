@@ -28,9 +28,9 @@ body {
   background: var(--bg);
   color: var(--text-bright);
   font-family: 'Space Mono', monospace;
-  min-height: 100vh;
+  height: 100vh;
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: 280px 1fr 320px;
   grid-template-rows: auto 1fr;
   overflow: hidden;
 }
@@ -143,6 +143,36 @@ canvas {
   font-weight: 700;
 }
 
+.control-row-checkbox {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.control-row-checkbox label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--text-bright);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.control-row-checkbox input[type="checkbox"] {
+  accent-color: var(--iris);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.control-row-child {
+  padding-left: 16px;
+  border-left: 2px solid var(--border);
+  margin-left: 4px;
+}
+
 input[type="range"] {
   width: 100%;
   -webkit-appearance: none;
@@ -194,15 +224,21 @@ button.active {
   font-weight: 700;
 }
 
+.left-panel {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 24px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
 .log {
   font-size: 10px;
   color: var(--text);
   line-height: 1.8;
-  max-height: 120px;
-  overflow-y: auto;
 }
 
-.log div { 
+.log div {
   padding: 2px 0;
   border-bottom: 1px solid rgba(255,255,255,0.03);
 }
@@ -210,6 +246,7 @@ button.active {
 .log div span {
   color: var(--iris);
   margin-right: 6px;
+  opacity: 0.6;
 }
 
 /* Accordions */
@@ -288,6 +325,10 @@ textarea.json-area {
   <span>v0.1 — robot eye behavior system</span>
 </header>
 
+<div class="left-panel">
+  <div class="log" id="log"></div>
+</div>
+
 <div class="stage">
   <canvas id="canvas" width="600" height="600"></canvas>
 </div>
@@ -322,6 +363,34 @@ textarea.json-area {
     <div class="acc-body"><div class="acc-inner" id="panel-pupil"></div></div>
   </div>
 
+  <div class="accordion" id="acc-nose">
+    <button class="acc-header" onclick="toggleAcc('acc-nose')">
+      Nose <span class="chevron">▾</span>
+    </button>
+    <div class="acc-body"><div class="acc-inner" id="panel-nose"></div></div>
+  </div>
+
+  <div class="accordion open" id="acc-mouth">
+    <button class="acc-header" onclick="toggleAcc('acc-mouth')">
+      Mouth <span class="chevron">▾</span>
+    </button>
+    <div class="acc-body"><div class="acc-inner" id="panel-mouth"></div></div>
+  </div>
+
+  <div class="accordion open" id="acc-brow">
+    <button class="acc-header" onclick="toggleAcc('acc-brow')">
+      Brows <span class="chevron">▾</span>
+    </button>
+    <div class="acc-body"><div class="acc-inner" id="panel-brow"></div></div>
+  </div>
+
+  <div class="accordion open" id="acc-lids">
+    <button class="acc-header" onclick="toggleAcc('acc-lids')">
+      Lids <span class="chevron">▾</span>
+    </button>
+    <div class="acc-body"><div class="acc-inner" id="panel-lids"></div></div>
+  </div>
+
   <div class="accordion open" id="acc-blink">
     <button class="acc-header" onclick="toggleAcc('acc-blink')">
       Blink <span class="chevron">▾</span>
@@ -334,6 +403,20 @@ textarea.json-area {
       Gaze <span class="chevron">▾</span>
     </button>
     <div class="acc-body"><div class="acc-inner" id="panel-gaze"></div></div>
+  </div>
+
+  <div class="accordion open" id="acc-anim">
+    <button class="acc-header" onclick="toggleAcc('acc-anim')">
+      Animation <span class="chevron">▾</span>
+    </button>
+    <div class="acc-body"><div class="acc-inner" id="panel-anim"></div></div>
+  </div>
+
+  <div class="accordion" id="acc-trail">
+    <button class="acc-header" onclick="toggleAcc('acc-trail')">
+      Arc Trail <span class="chevron">▾</span>
+    </button>
+    <div class="acc-body"><div class="acc-inner" id="panel-trail"></div></div>
   </div>
 
   <div class="accordion open" id="acc-colors">
@@ -370,14 +453,6 @@ textarea.json-area {
     </div></div>
   </div>
 
-  <div class="accordion open" id="acc-log">
-    <button class="acc-header" onclick="toggleAcc('acc-log')">
-      Event Log <span class="chevron">▾</span>
-    </button>
-    <div class="acc-body"><div class="acc-inner">
-      <div class="log" id="log"></div>
-    </div></div>
-  </div>
 
 </div>
 
@@ -399,12 +474,57 @@ const params = {
   eyeCenterX:      300,
   eyeCenterY:      260,
   eyeSpacing:      220,
+  pupilSpacing:    0,
 
   // ── Pupil ──
   pupilSize:       0.40,
   pupilTravel:     0.38,
   pupilBiasX:      0,
   pupilBiasY:      0,
+
+  // ── Brows ──
+  browSpacing:     220,  // mirrors eyeSpacing
+  browOffsetY:     90,   // pixels above eye center
+  browWidth:       130,
+  browThickness:   14,
+  browArch:        18,   // arch height in pixels
+  browRotation:    0,    // degrees, mirrored like eyes
+
+  // ── Arc Trail ──
+  showTrail:       false,
+  trailDuration:   3,    // seconds to remember
+
+  // ── Saccade Target Indicator ──
+  showSTI:         false,
+  stiPersist:      false, // keep target visible between saccades
+  stiSize:         8,    // radius in pixels
+
+  // ── Visibility ──
+  showMouth:       true,
+  showBrows:       true,
+  showPupil:       true,
+  showLids:        true,
+
+  // ── Nose ──
+  showNose:        false,
+  noseOffsetY:     55,   // pixels below eye center Y
+  noseBridgeH:     20,   // bridge height
+  noseWidth:       28,   // nostril spread
+  noseWingH:       8,    // how far nostrils drop below bridge base
+  noseWingCurve:   4,    // outward flare of nostril bezier
+  noseThickness:   6,
+
+  // ── Mouth ──
+  mouthOffsetY:    110,  // pixels below eye center Y
+  mouthWidth:      120,
+  mouthThickness:  10,
+  mouthCurve:      0,    // pixels: positive = smile, negative = frown
+
+  // ── Lids ──
+  upperLidPos:     0,    // 0 = fully open, 1 = closed to center
+  lowerLidPos:     0,
+  lidCurvature:    0,    // -1 = concave, 0 = straight, 1 = convex
+  lidRotation:     0,    // degrees, tilts both lids relative to the eye
 
   // ── Blink ──
   lidOpenness:     0.85,
@@ -423,6 +543,31 @@ const params = {
   pauseMin:        1.50,
   pauseMax:        3.50,
   microSaccade:    0.02,
+
+  // ── Anticipation (saccade) ──
+  anticipationAmt: 0,     // 0 = off; 0.1–0.4 = wind-up distance (ratio of saccade dist)
+  anticipationDur: 0.08,  // seconds for wind-up move
+
+  // ── Follow-through (saccade) ──
+  overshootAmt:    0,     // 0 = off; 0.1–0.4 = overshoot distance (ratio of saccade dist)
+  overshootDamp:   10,    // spring damping  — higher = less oscillation
+  overshootStiff:  140,   // spring stiffness — higher = snappier return
+
+  // ── Blink facial reactions ──
+  blinkBrowReact:  false,
+  blinkBrowAmt:    6,     // pixels brow lowers when closing
+  blinkMouthReact: false,
+  blinkMouthAmt:   8,     // curve shift when closing
+  blinkReactDamp:  8,     // 1=sluggish, 20=snappy
+
+  // ── Blink anticipation ──
+  blinkAntAmt:     0,     // 0 = off; how much the eye widens before closing (0–0.3)
+  blinkAntDur:     0.06,  // seconds for widening
+
+  // ── Blink follow-through ──
+  blinkOvAmt:      0,     // 0 = off; how much the eye widens after opening (0–0.3)
+  blinkOvDamp:     8,     // spring damping
+  blinkOvStiff:    120,   // spring stiffness
 };
 
 // ── Color params ──
@@ -432,6 +577,12 @@ const colors = {
   eyeColor:   '#ffffff',
   pupilColor: '#000000',
   glowColor:  '#4af7c4',
+  lidColor:   '#131318',
+  browColor:  '#ffffff',
+  noseColor:  '#ffffff',
+  mouthColor: '#ffffff',
+  trailColor: '#ff4444',
+  stiColor:   '#4af7c4',
 };
 
 function hexToRgba(hex, alpha) {
@@ -446,8 +597,8 @@ function getEyes() {
   const half = params.eyeSpacing / 2;
   const rot  = params.eyeRotation * Math.PI / 180;
   return [
-    { cx: params.eyeCenterX - half, cy: params.eyeCenterY, rx: params.eyeRx, ry: params.eyeRy, rot },
-    { cx: params.eyeCenterX + half, cy: params.eyeCenterY, rx: params.eyeRx, ry: params.eyeRy, rot },
+    { cx: params.eyeCenterX - half, cy: params.eyeCenterY, rx: params.eyeRx, ry: params.eyeRy, rot: -rot, sign: -1 },
+    { cx: params.eyeCenterX + half, cy: params.eyeCenterY, rx: params.eyeRx, ry: params.eyeRy, rot,         sign:  1 },
   ];
 }
 
@@ -481,26 +632,48 @@ const state = {
 
   // Arc animation
   arc: {
-    active: false,
+    phase:    'idle',  // 'anticipation' | 'main' | 'followthrough'
+    active:   false,   // true when phase !== 'idle'
+    curveSign: 1,      // persisted random direction of arc curve
+
+    // Main bezier arc
     startX: 0, startY: 0,
     endX:   0, endY:   0,
-    ctrlX:  0, ctrlY:  0,  // bezier control point
+    ctrlX:  0, ctrlY:  0,
     t: 0,
     duration: 1,
     easeFn: ease.inOutCubic,
+
+    // Anticipation (wind-up)
+    antT:  0,
+    antDur: 0.08,
+    antOX: 0, antOY: 0,  // origin of wind-up
+    antTX: 0, antTY: 0,  // wind-up target (opposite direction)
+
+    // Follow-through (spring)
+    ftVX: 0, ftVY: 0,    // spring velocity
+    ftTimer: 0,
   },
 
   // Blinking
   blink: {
-    t: 0,          // 0=open, 1=closed
-    state: 'open', // open | closing | closed | opening
+    t: 0,          // 0=open, 1=closed; negative = wider than normal
+    state: 'open', // open | anticipating | closing | closed | opening | followthrough
     timer: 0,
     nextBlink: 3,
+    ftVel: 0,      // spring velocity for follow-through
   },
 
   // Behavior
   behavior: 'idle',
   behaviorTimer: 0,
+
+  // Arc trail
+  trailPoints: [],  // { x, y, t }
+  now: 0,           // running time in seconds
+
+  // Blink reaction (smoothed blink.t for facial reactions)
+  blinkReact: 0,
 };
 
 let lastTime = null;
@@ -521,6 +694,15 @@ const behaviors = {
     speedMult:     1.0,
     blinkMult:     1.0,
     lidOpenness:   () => params.lidOpenness,
+    // Slight natural droop on upper lid — relaxed, not fully awake
+    upperLid:      () => Math.min(1, params.upperLidPos + 0.10),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.00),
+    // Neutral brows, very slight natural arch
+    browRaise:     () => 0,
+    browTilt:      () => 0,
+    browArch:      () => 0,
+    // Slight resting smile — at ease
+    mouthCurve:    () => 8,
   },
   attentive: {
     label: 'ATTENTIVE',
@@ -531,6 +713,15 @@ const behaviors = {
     speedMult:     2.2,
     blinkMult:     0.4,
     lidOpenness:   () => Math.min(1, params.lidOpenness * 1.1),
+    // Lids pulled wide open — alert, tracking
+    upperLid:      () => Math.max(0, params.upperLidPos - 0.05),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.06),
+    // Brows raised and pulled inward — focused, intent
+    browRaise:     () => 12,
+    browTilt:      () => 4,   // inner corners down = stern focus
+    browArch:      () => 6,
+    // Tight flat line — serious, focused
+    mouthCurve:    () => -6,
   },
   curious: {
     label: 'CURIOUS',
@@ -541,6 +732,15 @@ const behaviors = {
     speedMult:     1.4,
     blinkMult:     0.8,
     lidOpenness:   () => params.lidOpenness,
+    // Neutral lids — open and scanning, no strong expression
+    upperLid:      () => Math.min(1, params.upperLidPos + 0.02),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.00),
+    // One brow effectively raised — quizzical, outer corners tilted up
+    browRaise:     () => 8,
+    browTilt:      () => -6,  // outer corners down = quizzical
+    browArch:      () => 10,
+    // Open slight smile — engaged, interested
+    mouthCurve:    () => 16,
   },
   sleepy: {
     label: 'SLEEPY',
@@ -551,6 +751,15 @@ const behaviors = {
     speedMult:     0.4,
     blinkMult:     2.5,
     lidOpenness:   () => params.lidOpenness * 0.55,
+    // Heavy upper lid droop, lower lid closing in — drowsy
+    upperLid:      () => Math.min(1, params.upperLidPos + 0.35),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.12),
+    // Brows low and drooping outward — heavy, sad, tired
+    browRaise:     () => -14,
+    browTilt:      () => -8,  // outer corners down = sad/droopy
+    browArch:      () => -8,
+    // Droopy frown — tired, sad
+    mouthCurve:    () => -18,
   },
 };
 
@@ -560,32 +769,51 @@ function getBehavior() { return behaviors[state.behavior]; }
 //  GAZE SACCADE — arc-based eye movement
 // ─────────────────────────────────────────────
 
-function triggerSaccade(targetX, targetY) {
+// Compute bezier ctrl point + duration for a given start→end, using arc.curveSign
+function setupArcSegment(startX, startY, endX, endY) {
   const beh = getBehavior();
   const arc = state.arc;
-
-  arc.startX = state.gazeX;
-  arc.startY = state.gazeY;
-  arc.endX   = targetX;
-  arc.endY   = targetY;
-
-  // Generate arc control point perpendicular to the path
-  const midX = (arc.startX + arc.endX) / 2;
-  const midY = (arc.startY + arc.endY) / 2;
-  const dx = arc.endX - arc.startX;
-  const dy = arc.endY - arc.startY;
-  const perpX = -dy;
-  const perpY =  dx;
-  const curve = params.arcCurvature * (Math.random() > 0.5 ? 1 : -1);
-  arc.ctrlX = midX + perpX * curve;
-  arc.ctrlY = midY + perpY * curve;
-
-  // Duration based on distance & speed
-  const dist = Math.sqrt(dx * dx + dy * dy);
+  const dx = endX - startX;
+  const dy = endY - startY;
+  const midX = (startX + endX) / 2;
+  const midY = (startY + endY) / 2;
+  const curve = params.arcCurvature * arc.curveSign;
+  arc.startX   = startX;
+  arc.startY   = startY;
+  arc.endX     = endX;
+  arc.endY     = endY;
+  arc.ctrlX    = midX + (-dy) * curve;
+  arc.ctrlY    = midY + ( dx) * curve;
+  const dist   = Math.sqrt(dx * dx + dy * dy);
   arc.duration = (0.15 + dist * 0.6) / (params.gazeSpeed * beh.speedMult);
-  arc.t = 0;
-  arc.easeFn = beh.easeFn();
-  arc.active = true;
+  arc.t        = 0;
+  arc.easeFn   = beh.easeFn();
+}
+
+function triggerSaccade(targetX, targetY) {
+  const arc = state.arc;
+  arc.curveSign = Math.random() > 0.5 ? 1 : -1;
+
+  if (params.anticipationAmt > 0) {
+    // Wind-up: move opposite the target direction first
+    const dx = targetX - state.gazeX;
+    const dy = targetY - state.gazeY;
+    arc.antOX  = state.gazeX;
+    arc.antOY  = state.gazeY;
+    arc.antTX  = state.gazeX - dx * params.anticipationAmt;
+    arc.antTY  = state.gazeY - dy * params.anticipationAmt;
+    arc.antT   = 0;
+    arc.antDur = Math.max(0.02, params.anticipationDur);
+    // Store final target so we can set up the main arc after wind-up
+    arc.endX   = targetX;
+    arc.endY   = targetY;
+    arc.phase  = 'anticipation';
+    arc.active = true;
+  } else {
+    setupArcSegment(state.gazeX, state.gazeY, targetX, targetY);
+    arc.phase  = 'main';
+    arc.active = true;
+  }
 
   logEvent(`saccade → (${targetX.toFixed(2)}, ${targetY.toFixed(2)})`);
 }
@@ -625,23 +853,61 @@ function updateBlink(dt) {
     b.timer += dt;
     const interval = params.blinkInterval / beh.blinkMult;
     if (b.timer >= interval) {
-      b.state = 'closing';
-      b.t = 0;
       b.timer = 0;
       logEvent('blink');
+      if (params.blinkAntAmt > 0) {
+        // Widen before closing
+        b.state = 'anticipating';
+      } else {
+        b.state = 'closing';
+        b.t = 0;
+      }
     }
+
+  } else if (b.state === 'anticipating') {
+    // t drifts toward -blinkAntAmt (wider than normal)
+    const target = -params.blinkAntAmt;
+    b.t -= dt / Math.max(0.01, params.blinkAntDur);
+    if (b.t <= target) {
+      b.t = target;
+      b.state = 'closing';
+    }
+
   } else if (b.state === 'closing') {
     b.t += dt / Math.max(0.01, params.blinkCloseSpeed);
     if (b.t >= 1) { b.t = 1; b.state = 'closed'; }
+
   } else if (b.state === 'closed') {
     b.timer += dt;
     if (b.timer >= params.blinkHold) { b.state = 'opening'; b.t = 1; b.timer = 0; }
+
   } else if (b.state === 'opening') {
     b.t -= dt / Math.max(0.01, params.blinkOpenSpeed);
     if (b.t <= 0) {
       b.t = 0;
+      if (params.blinkOvAmt > 0) {
+        // Overshoot past fully-open, spring back
+        b.t     = -params.blinkOvAmt;
+        b.ftVel = 0;
+        b.state = 'followthrough';
+      } else {
+        b.state = 'open';
+        if (Math.random() < params.doubleBlink) {
+          b.state = 'closing';
+          logEvent('blink ×2');
+        }
+      }
+    }
+
+  } else if (b.state === 'followthrough') {
+    // Damped spring back to t=0 (normal open)
+    b.ftVel += (-params.blinkOvStiff * b.t - params.blinkOvDamp * b.ftVel) * dt;
+    b.t     += b.ftVel * dt;
+    const settled = Math.abs(b.ftVel) < 0.005 && Math.abs(b.t) < 0.005;
+    if (settled) {
+      b.t     = 0;
+      b.ftVel = 0;
       b.state = 'open';
-      // Double blink: schedule another immediately
       if (Math.random() < params.doubleBlink) {
         b.state = 'closing';
         logEvent('blink ×2');
@@ -657,20 +923,69 @@ function updateBlink(dt) {
 function update(dt) {
   const beh = getBehavior();
 
-  // Update arc animation
-  if (state.arc.active) {
-    state.arc.t += dt / state.arc.duration;
-    if (state.arc.t >= 1) {
-      state.arc.t = 1;
-      state.arc.active = false;
-      state.gazeX = state.arc.endX;
-      state.gazeY = state.arc.endY;
-      // Schedule next saccade using global pause params
-      state.behaviorTimer = -(params.pauseMin + Math.random() * (params.pauseMax - params.pauseMin));
+  // Update arc animation — phase state machine
+  const arc = state.arc;
+  if (arc.phase === 'anticipation') {
+    arc.antT += dt / arc.antDur;
+    if (arc.antT >= 1) {
+      // Wind-up complete — transition to main arc from current (wound-up) position
+      state.gazeX = arc.antTX;
+      state.gazeY = arc.antTY;
+      setupArcSegment(state.gazeX, state.gazeY, arc.endX, arc.endY);
+      arc.phase = 'main';
     } else {
-      const et = state.arc.easeFn(state.arc.t);
-      state.gazeX = bezierPoint(et, state.arc.startX, state.arc.ctrlX, state.arc.endX);
-      state.gazeY = bezierPoint(et, state.arc.startY, state.arc.ctrlY, state.arc.endY);
+      // Ease into the wind-up position
+      const et = ease.inOutCubic(arc.antT);
+      state.gazeX = arc.antOX + (arc.antTX - arc.antOX) * et;
+      state.gazeY = arc.antOY + (arc.antTY - arc.antOY) * et;
+    }
+
+  } else if (arc.phase === 'main') {
+    arc.t += dt / arc.duration;
+    if (arc.t >= 1) {
+      state.gazeX = arc.endX;
+      state.gazeY = arc.endY;
+      if (params.overshootAmt > 0) {
+        // Project gaze past target and let spring pull it back
+        const dx   = arc.endX - arc.startX;
+        const dy   = arc.endY - arc.startY;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        state.gazeX = arc.endX + (dx / dist) * dist * params.overshootAmt;
+        state.gazeY = arc.endY + (dy / dist) * dist * params.overshootAmt;
+        arc.ftVX   = 0;
+        arc.ftVY   = 0;
+        arc.ftTimer = 0;
+        arc.phase  = 'followthrough';
+      } else {
+        arc.phase  = 'idle';
+        arc.active = false;
+        state.behaviorTimer = -(params.pauseMin + Math.random() * (params.pauseMax - params.pauseMin));
+      }
+    } else {
+      const et = arc.easeFn(arc.t);
+      state.gazeX = bezierPoint(et, arc.startX, arc.ctrlX, arc.endX);
+      state.gazeY = bezierPoint(et, arc.startY, arc.ctrlY, arc.endY);
+    }
+
+  } else if (arc.phase === 'followthrough') {
+    // Damped spring toward arc.endX/Y
+    const dispX = state.gazeX - arc.endX;
+    const dispY = state.gazeY - arc.endY;
+    arc.ftVX += (-params.overshootStiff * dispX - params.overshootDamp * arc.ftVX) * dt;
+    arc.ftVY += (-params.overshootStiff * dispY - params.overshootDamp * arc.ftVY) * dt;
+    state.gazeX += arc.ftVX * dt;
+    state.gazeY += arc.ftVY * dt;
+    arc.ftTimer += dt;
+
+    const settled = arc.ftTimer > 2.0 ||
+      (Math.abs(arc.ftVX) < 0.008 && Math.abs(arc.ftVY) < 0.008 &&
+       Math.abs(dispX)    < 0.008 && Math.abs(dispY)    < 0.008);
+    if (settled) {
+      state.gazeX = arc.endX;
+      state.gazeY = arc.endY;
+      arc.phase   = 'idle';
+      arc.active  = false;
+      state.behaviorTimer = -(params.pauseMin + Math.random() * (params.pauseMax - params.pauseMin));
     }
   }
 
@@ -690,14 +1005,112 @@ function update(dt) {
   }
 
   updateBlink(dt);
+
+  // Smooth blink reaction for brow/mouth follow
+  state.blinkReact += (state.blink.t - state.blinkReact) * Math.min(1, dt * params.blinkReactDamp);
+
+  // Arc trail — record gaze position and prune old points
+  state.now += dt;
+  if (params.showTrail) {
+    state.trailPoints.push({ x: state.gazeX, y: state.gazeY, t: state.now });
+    const cutoff = state.now - params.trailDuration;
+    while (state.trailPoints.length > 0 && state.trailPoints[0].t < cutoff) {
+      state.trailPoints.shift();
+    }
+  } else {
+    state.trailPoints.length = 0;
+  }
 }
 
 // ─────────────────────────────────────────────
 //  DRAW
 // ─────────────────────────────────────────────
 
+function drawTrail(eye) {
+  if (!params.showTrail || state.trailPoints.length < 2) return;
+  const { cx, cy, rx, ry, rot, sign } = eye;
+  const beh = getBehavior();
+  const openness  = beh.lidOpenness() * (1 - state.blink.t);
+  const displayRy = ry * openness;
+  if (displayRy < 0.5) return;
+
+  const travel = params.pupilTravel;
+  const cos = Math.cos(rot), sin = Math.sin(rot);
+  const dur = params.trailDuration;
+
+  // Convert a normalized gaze point to canvas px
+  function toPx(pt) {
+    const lx = (pt.x + params.pupilBiasX + params.pupilSpacing * sign) * rx * travel;
+    const ly = (pt.y + params.pupilBiasY) * displayRy * travel;
+    return { x: cx + lx * cos - ly * sin, y: cy + lx * sin + ly * cos };
+  }
+
+  const pts = state.trailPoints;
+  for (let i = 1; i < pts.length; i++) {
+    const p1 = toPx(pts[i - 1]);
+    const p2 = toPx(pts[i]);
+    // Newer end of segment drives opacity
+    const age   = (state.now - pts[i].t) / dur;
+    const alpha = Math.max(0, 1 - age) * 0.75;
+
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.strokeStyle = hexToRgba(colors.trailColor, alpha);
+    ctx.lineWidth   = 2;
+    ctx.lineCap     = 'round';
+    ctx.stroke();
+  }
+}
+
+function drawSTI(eye) {
+  if (!params.showSTI) return;
+  if (!state.arc.active && !params.stiPersist) return;
+  const { cx, cy, rx, ry, rot, sign } = eye;
+  const beh = getBehavior();
+  const openness  = beh.lidOpenness() * (1 - state.blink.t);
+  const displayRy = ry * openness;
+  if (displayRy < 0.5) return;
+
+  const travel = params.pupilTravel;
+  const cos = Math.cos(rot), sin = Math.sin(rot);
+
+  // Convert arc end point to canvas coords (same transform as pupil)
+  const lx = (state.arc.endX + params.pupilBiasX + params.pupilSpacing * sign) * rx * travel;
+  const ly = (state.arc.endY + params.pupilBiasY) * displayRy * travel;
+  const tx = cx + lx * cos - ly * sin;
+  const ty = cy + lx * sin + ly * cos;
+
+  const r = params.stiSize;
+  // Fade out as we approach target; persist mode holds at full opacity
+  const alpha = state.arc.active
+    ? Math.max(0, 1 - state.arc.t) * 0.85
+    : 0.45;
+
+  ctx.save();
+
+  // Outer circle
+  ctx.beginPath();
+  ctx.arc(tx, ty, r, 0, Math.PI * 2);
+  ctx.strokeStyle = hexToRgba(colors.stiColor, alpha);
+  ctx.lineWidth   = 1.5;
+  ctx.stroke();
+
+  // Cross hair
+  ctx.beginPath();
+  ctx.moveTo(tx - r * 0.55, ty);
+  ctx.lineTo(tx + r * 0.55, ty);
+  ctx.moveTo(tx, ty - r * 0.55);
+  ctx.lineTo(tx, ty + r * 0.55);
+  ctx.strokeStyle = hexToRgba(colors.stiColor, alpha * 0.6);
+  ctx.lineWidth   = 1;
+  ctx.stroke();
+
+  ctx.restore();
+}
+
 function drawEye(eye) {
-  const { cx, cy, rx, ry, rot } = eye;
+  const { cx, cy, rx, ry, rot, sign } = eye;
   const beh = getBehavior();
 
   // Blink squishes ry to zero
@@ -707,7 +1120,7 @@ function drawEye(eye) {
 
   // Gaze offset in eye-local space, then rotate into canvas space
   const travel = params.pupilTravel;
-  const localDx = (state.gazeX + params.pupilBiasX) * rx * travel;
+  const localDx = (state.gazeX + params.pupilBiasX + params.pupilSpacing * sign) * rx * travel;
   const localDy = (state.gazeY + params.pupilBiasY) * displayRy * travel;
   const cos = Math.cos(rot), sin = Math.sin(rot);
   const pupilX = cx + localDx * cos - localDy * sin;
@@ -735,10 +1148,155 @@ function drawEye(eye) {
   ctx.clip();
 
   // Pupil — same aspect ratio, rotated with eye
+  if (params.showPupil) {
+    ctx.beginPath();
+    ctx.ellipse(pupilX, pupilY, pupilRx, pupilRy, rot, 0, Math.PI * 2);
+    ctx.fillStyle = colors.pupilColor;
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawLids(eye) {
+  const { cx, cy, rx, ry, rot } = eye;
+  const beh = getBehavior();
+  const openness  = beh.lidOpenness() * (1 - state.blink.t);
+  const displayRy = ry * openness;
+  if (displayRy < 0.5) return;
+
+  const upperP = beh.upperLid();
+  const lowerP = beh.lowerLid();
+  if (upperP <= 0 && lowerP <= 0) return;
+
+  const curv    = params.lidCurvature;
+  const lidRot  = rot + params.lidRotation * Math.PI / 180;
+
+  ctx.save();
+  // Clip to the eye ellipse so lids stay within the eye boundary
   ctx.beginPath();
-  ctx.ellipse(pupilX, pupilY, pupilRx, pupilRy, rot, 0, Math.PI * 2);
-  ctx.fillStyle = colors.pupilColor;
-  ctx.fill();
+  ctx.ellipse(cx, cy, rx, displayRy, rot, 0, Math.PI * 2);
+  ctx.clip();
+
+  ctx.fillStyle = colors.lidColor;
+
+  // Work in lid-local rotated space (may differ from eye rotation)
+  ctx.translate(cx, cy);
+  ctx.rotate(lidRot);
+
+  if (upperP > 0) {
+    // Edge slides from -displayRy (open) down to +displayRy (fully closed)
+    const edgeY = displayRy * (2 * upperP - 1);
+    const cpY   = edgeY + curv * displayRy; // bezier control point bows the inner edge
+
+    ctx.beginPath();
+    ctx.moveTo(-rx, -displayRy - 2);           // top-left corner
+    ctx.lineTo( rx, -displayRy - 2);           // top-right corner
+    ctx.lineTo( rx,  edgeY);                   // right side of lid edge
+    ctx.quadraticCurveTo(0, cpY, -rx, edgeY); // curved inner edge
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  if (lowerP > 0) {
+    // Edge slides from +displayRy (open) up to -displayRy (fully closed)
+    const edgeY = displayRy * (1 - 2 * lowerP);
+    const cpY   = edgeY - curv * displayRy;
+
+    ctx.beginPath();
+    ctx.moveTo(-rx,  displayRy + 2);
+    ctx.lineTo( rx,  displayRy + 2);
+    ctx.lineTo( rx,  edgeY);
+    ctx.quadraticCurveTo(0, cpY, -rx, edgeY);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawNose() {
+  if (!params.showNose) return;
+
+  const mx      = params.eyeCenterX;
+  const my      = params.eyeCenterY + params.noseOffsetY;
+  const bridgeH = params.noseBridgeH;
+  const halfW   = params.noseWidth / 2;
+  const wingH   = params.noseWingH;
+  const wingC   = params.noseWingCurve;
+
+  ctx.save();
+  ctx.strokeStyle = colors.noseColor;
+  ctx.lineWidth   = params.noseThickness;
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+
+  // Bridge — vertical line down from top
+  ctx.beginPath();
+  ctx.moveTo(mx, my);
+  ctx.lineTo(mx, my + bridgeH);
+
+  // Left nostril wing — curves out and down from bridge base
+  ctx.moveTo(mx, my + bridgeH);
+  ctx.quadraticCurveTo(mx - wingC, my + bridgeH + wingH, mx - halfW, my + bridgeH + wingH);
+
+  // Right nostril wing
+  ctx.moveTo(mx, my + bridgeH);
+  ctx.quadraticCurveTo(mx + wingC, my + bridgeH + wingH, mx + halfW, my + bridgeH + wingH);
+
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawMouth() {
+  const beh  = getBehavior();
+  const mouthReact = params.blinkMouthReact ? params.blinkMouthAmt * state.blinkReact : 0;
+  const mx   = params.eyeCenterX;
+  const my   = params.eyeCenterY + params.mouthOffsetY - mouthReact;
+  const w    = params.mouthWidth / 2;
+  const curve = params.mouthCurve + beh.mouthCurve();
+
+  ctx.save();
+  ctx.translate(mx, my);
+
+  ctx.beginPath();
+  ctx.moveTo(-w, 0);
+  // Control point below = smile, above = frown
+  ctx.quadraticCurveTo(0, curve, w, 0);
+
+  ctx.strokeStyle = colors.mouthColor;
+  ctx.lineWidth   = params.mouthThickness;
+  ctx.lineCap     = 'round';
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawBrow(eye) {
+  const { cy, sign } = eye;
+  const beh = getBehavior();
+
+  const bx        = params.eyeCenterX + (params.browSpacing / 2) * sign;
+  const browReact = params.blinkBrowReact ? params.blinkBrowAmt * state.blinkReact : 0;
+  const offsetY   = params.browOffsetY + beh.browRaise() - browReact;
+  const width     = params.browWidth;
+  const thickness = params.browThickness;
+  const arch      = params.browArch + beh.browArch();
+  // Rotation mirrors: left brow negates, right brow follows sign
+  const rot       = (params.browRotation + beh.browTilt()) * Math.PI / 180 * sign;
+
+  ctx.save();
+  ctx.translate(bx, cy - offsetY);
+  ctx.rotate(rot);
+
+  ctx.beginPath();
+  ctx.moveTo(-width / 2, 0);
+  ctx.quadraticCurveTo(0, -arch, width / 2, 0);
+
+  ctx.strokeStyle = colors.browColor;
+  ctx.lineWidth   = thickness;
+  ctx.lineCap     = 'round';
+  ctx.stroke();
 
   ctx.restore();
 }
@@ -748,7 +1306,10 @@ function draw() {
   ctx.fillStyle = colors.canvasBg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  getEyes().forEach(eye => drawEye(eye));
+  getEyes().forEach(eye => { drawEye(eye); if (params.showLids) drawLids(eye); if (params.showBrows) drawBrow(eye); });
+  getEyes().forEach(eye => { drawTrail(eye); drawSTI(eye); });
+  drawNose();
+  if (params.showMouth) drawMouth();
 
   // ── Behavior label ──
   const beh = getBehavior();
@@ -849,6 +1410,12 @@ function buildColorPanel() {
     ['canvasBg',   'Canvas bg', null],
     ['eyeColor',   'Eye',       null],
     ['pupilColor', 'Pupil',     null],
+    ['trailColor', 'Trail',     null],
+    ['stiColor',   'STI',       null],
+    ['noseColor',  'Nose',      null],
+    ['mouthColor', 'Mouth',     null],
+    ['browColor',  'Brow',      null],
+    ['lidColor',   'Lid',       null],
     ['glowColor',  'Glow',      null],
   ].forEach(([key, label, onChange]) => panel.appendChild(makeColorRow(key, label, onChange)));
   stage.style.background = colors.stageBg;
@@ -923,6 +1490,28 @@ function updateParam(key, value) {
   saveConfig();
 }
 
+function makeCheckbox(key, label) {
+  const row = document.createElement('div');
+  row.className = 'control-row control-row-checkbox';
+
+  const lbl = document.createElement('label');
+  lbl.htmlFor = 'ctrl-' + key;
+  lbl.textContent = label;
+
+  const inp = document.createElement('input');
+  inp.type    = 'checkbox';
+  inp.id      = 'ctrl-' + key;
+  inp.checked = !!params[key];
+  inp.addEventListener('change', function() {
+    params[key] = this.checked;
+    saveConfig();
+  });
+
+  lbl.prepend(inp);
+  row.appendChild(lbl);
+  return { row, inp };
+}
+
 function makeSlider(key, label, min, max, step, dec = 2) {
   const row = document.createElement('div');
   row.className = 'control-row';
@@ -956,12 +1545,46 @@ function buildControlPanels() {
       ['eyeCenterX',   'Center X',   50,  550,  1,    0],
       ['eyeCenterY',   'Center Y',   50,  550,  1,    0],
       ['eyeSpacing',   'Spacing',    20,  500,  1,    0],
+      ['browSpacing',  '↳ Brow',    20,  500,  1,    0, true],
+      ['pupilSpacing', '↳ Pupil',   -1,    1,   0.01, 2, true],
     ],
     'panel-pupil': [
+      ['showPupil',    'Visible',   'bool'],
       ['pupilSize',    'Size',      0.05, 0.95, 0.01, 2],
       ['pupilTravel',  'Travel',    0,    0.90, 0.01, 2],
       ['pupilBiasX',   'Bias X',   -1,    1,   0.01, 2],
       ['pupilBiasY',   'Bias Y',   -1,    1,   0.01, 2],
+    ],
+    'panel-nose': [
+      ['showNose',       'Visible',    'bool'],
+      ['noseOffsetY',    'Height',      0,   200,  1,   0],
+      ['noseBridgeH',    'Bridge',      0,    60,  1,   0],
+      ['noseWidth',      'Width',       4,   100,  1,   0],
+      ['noseWingH',      'Wing drop',   0,    40,  1,   0],
+      ['noseWingCurve',  'Wing flare',  0,    40,  1,   0],
+      ['noseThickness',  'Thickness',   1,    20,  1,   0],
+    ],
+    'panel-mouth': [
+      ['showMouth',      'Visible',   'bool'],
+      ['mouthOffsetY',   'Height',    20,  300,  1,   0],
+      ['mouthWidth',     'Width',     10,  400,  1,   0],
+      ['mouthThickness', 'Thickness',  2,   40,  1,   0],
+      ['mouthCurve',     'Curve',    -60,   60,  1,   0],
+    ],
+    'panel-brow': [
+      ['showBrows',     'Visible',   'bool'],
+      ['browOffsetY',   'Height',    20,  200,  1,   0],
+      ['browWidth',     'Width',     20,  300,  1,   0],
+      ['browThickness', 'Thickness',  2,   40,  1,   0],
+      ['browArch',      'Arch',     -30,   80,  1,   0],
+      ['browRotation',  'Rotation', -45,   45,  0.5, 1],
+    ],
+    'panel-lids': [
+      ['showLids',     'Visible',    'bool'],
+      ['upperLidPos',  'Upper',      0,   1,   0.01, 2],
+      ['lowerLidPos',  'Lower',      0,   1,   0.01, 2],
+      ['lidCurvature', 'Curvature', -1,   1,   0.01, 2],
+      ['lidRotation',  'Rotation',  -45,  45,  0.5,  1],
     ],
     'panel-blink': [
       ['lidOpenness',      'Openness',     0.1, 1.0,  0.01, 2],
@@ -981,6 +1604,30 @@ function buildControlPanels() {
       ['pauseMax',      'Pause max',   0.1,  20,  0.1,  1],
       ['microSaccade',  'Micro-drift', 0,    1,   0.01, 2],
     ],
+    'panel-anim': [
+      ['anticipationAmt', 'Saccade anticipation', 0,    0.5,  0.01, 2],
+      ['anticipationDur', '↳ Duration',           0.02, 0.3,  0.01, 2, true],
+      ['overshootAmt',    'Saccade overshoot',    0,    0.5,  0.01, 2],
+      ['overshootDamp',   '↳ Damping',            1,    30,   0.5,  1, true],
+      ['overshootStiff',  '↳ Stiffness',          20,   400,  5,    0, true],
+      ['blinkAntAmt',     'Blink anticipation',   0,    0.3,  0.01, 2],
+      ['blinkAntDur',     '↳ Duration',           0.02, 0.2,  0.01, 2, true],
+      ['blinkOvAmt',      'Blink overshoot',      0,    0.3,  0.01, 2],
+      ['blinkOvDamp',     '↳ Damping',            1,    30,   0.5,  1, true],
+      ['blinkOvStiff',    '↳ Stiffness',          20,   400,  5,    0, true],
+      ['blinkBrowReact',  'Brow reacts to blink', 'bool'],
+      ['blinkBrowAmt',    '↳ Amount',             0,    30,   0.5,  1, true],
+      ['blinkMouthReact', 'Mouth reacts to blink','bool'],
+      ['blinkMouthAmt',   '↳ Amount',             0,    30,   0.5,  1, true],
+      ['blinkReactDamp',  '↳ Damping',            1,    20,   0.5,  1, true],
+    ],
+    'panel-trail': [
+      ['showTrail',      'Trail visible',  'bool'],
+      ['trailDuration',  'Duration',       0.5,  10,  0.5,  1],
+      ['showSTI',        'STI visible',    'bool'],
+      ['stiPersist',     'STI persist',    'bool'],
+      ['stiSize',        'STI size',       3,    30,  1,    0],
+    ],
   };
 
   Object.entries(sections).forEach(([panelId, controls]) => {
@@ -988,9 +1635,16 @@ function buildControlPanels() {
     if (!panel) return;
     panel.innerHTML = '';
     controls.forEach(args => {
-      const { row, inp } = makeSlider(...args);
-      panel.appendChild(row);
-      refreshSlider(inp);
+      if (args[2] === 'bool') {
+        const { row } = makeCheckbox(args[0], args[1]);
+        panel.appendChild(row);
+      } else {
+        const child = args[6]; // optional child-indent flag
+        const { row, inp } = makeSlider(...args.slice(0, 6));
+        if (child) row.classList.add('control-row-child');
+        panel.appendChild(row);
+        refreshSlider(inp);
+      }
     });
   });
 }
