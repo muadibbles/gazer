@@ -316,6 +316,43 @@ textarea.json-area {
 .btn-row { display: flex; gap: 6px; margin-top: 8px; }
 .btn-row button { flex: 1; font-size: 9px; padding: 8px; }
 
+/* WebSocket panel */
+.ws-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.ws-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--border);
+}
+.ws-dot.connecting { background: #f5a623; animation: pulse 1s ease-in-out infinite; }
+.ws-dot.connected  { background: var(--iris); animation: pulse 2s ease-in-out infinite; }
+.ws-dot.error      { background: var(--accent); }
+.ws-status-text {
+  font-size: 10px;
+  color: var(--text);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.ws-url-input {
+  width: 100%;
+  background: #08080e;
+  border: 1px solid var(--border);
+  color: var(--iris);
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  padding: 7px 8px;
+  border-radius: 2px;
+  outline: none;
+  box-sizing: border-box;
+}
+.ws-url-input:focus { border-color: var(--iris); }
+
   </style>
 </head>
 <body>
@@ -424,6 +461,26 @@ textarea.json-area {
       Colors <span class="chevron">▾</span>
     </button>
     <div class="acc-body"><div class="acc-inner" id="panel-colors"></div></div>
+  </div>
+
+  <div class="accordion" id="acc-ws">
+    <button class="acc-header" onclick="toggleAcc('acc-ws')">
+      WebSocket API <span class="chevron">▾</span>
+    </button>
+    <div class="acc-body"><div class="acc-inner">
+      <div class="ws-status-row">
+        <span class="ws-dot" id="ws-dot"></span>
+        <span class="ws-status-text" id="ws-status-text">disconnected</span>
+      </div>
+      <div class="control-row">
+        <label>Server URL</label>
+        <input class="ws-url-input" type="text" id="ws-url" value="ws://localhost:8765" />
+      </div>
+      <div class="btn-row">
+        <button onclick="wsConnect()">Connect</button>
+        <button onclick="wsDisconnect()">Disconnect</button>
+      </div>
+    </div></div>
   </div>
 
   <div class="accordion" id="acc-export">
@@ -1680,6 +1737,124 @@ buildColorPanel();
 syncAllSliders();
 logEvent('system ready');
 logEvent('behavior → idle');
+
+// ─────────────────────────────────────────────
+//  WEBSOCKET API
+//  Connect to a relay server (server.py) that
+//  forwards JSON commands from external senders.
+// ─────────────────────────────────────────────
+
+let ws = null;
+
+function wsSetStatus(status) {
+  const dot = document.getElementById('ws-dot');
+  const txt = document.getElementById('ws-status-text');
+  if (!dot || !txt) return;
+  dot.className = 'ws-dot ' + status;
+  txt.textContent = status;
+}
+
+function wsConnect() {
+  if (ws && ws.readyState === WebSocket.OPEN) return;
+  const url = document.getElementById('ws-url').value.trim();
+  wsSetStatus('connecting');
+  logEvent('ws → connecting');
+  try {
+    ws = new WebSocket(url);
+  } catch (e) {
+    wsSetStatus('error');
+    logEvent('ws error: ' + e.message);
+    return;
+  }
+  ws.addEventListener('open', () => {
+    wsSetStatus('connected');
+    logEvent('ws → connected');
+  });
+  ws.addEventListener('close', () => {
+    wsSetStatus('disconnected');
+    logEvent('ws → disconnected');
+    ws = null;
+  });
+  ws.addEventListener('error', () => {
+    wsSetStatus('error');
+    logEvent('ws error');
+  });
+  ws.addEventListener('message', e => {
+    try { wsHandleMessage(JSON.parse(e.data)); }
+    catch (err) { logEvent('ws parse error'); }
+  });
+}
+
+function wsDisconnect() {
+  if (ws) { ws.close(); ws = null; }
+}
+
+function wsHandleMessage(msg) {
+  switch (msg.type) {
+
+    case 'behavior':
+      if (behaviors[msg.value]) setBehavior(msg.value);
+      break;
+
+    case 'param':
+      if (params[msg.key] !== undefined) {
+        params[msg.key] = parseFloat(msg.value);
+        syncAllSliders();
+        saveConfig();
+        logEvent(`ws param ${msg.key} = ${msg.value}`);
+      }
+      break;
+
+    case 'params':
+      if (typeof msg.data === 'object') {
+        Object.assign(params, msg.data);
+        syncAllSliders();
+        saveConfig();
+        logEvent('ws params updated');
+      }
+      break;
+
+    case 'color':
+      if (colors[msg.key] !== undefined) {
+        colors[msg.key] = msg.value;
+        buildColorPanel();
+        saveConfig();
+        logEvent(`ws color ${msg.key} = ${msg.value}`);
+      }
+      break;
+
+    case 'look': {
+      const tx = Math.max(-0.9, Math.min(0.9, parseFloat(msg.x) || 0));
+      const ty = Math.max(-0.7, Math.min(0.7, parseFloat(msg.y) || 0));
+      triggerSaccade(tx, ty);
+      state.behaviorTimer = -2;
+      break;
+    }
+
+    case 'blink':
+      if (state.blink.state === 'open') {
+        state.blink.state = 'closing';
+        state.blink.t = 0;
+        state.blink.timer = 0;
+        logEvent('ws → blink');
+      }
+      break;
+
+    case 'config':
+      if (typeof msg.data === 'object') {
+        if (msg.data.params) Object.assign(params, msg.data.params);
+        if (msg.data.colors) Object.assign(colors, msg.data.colors);
+        syncAllSliders();
+        buildColorPanel();
+        saveConfig();
+        logEvent('ws config loaded');
+      }
+      break;
+
+    default:
+      logEvent(`ws unknown: ${msg.type}`);
+  }
+}
 
 </script>
 
