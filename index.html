@@ -308,50 +308,32 @@ textarea.json-area {
     </div></div>
   </div>
 
-  <div class="accordion open" id="acc-gaze">
-    <button class="acc-header" onclick="toggleAcc('acc-gaze')">
-      Gaze Arcs <span class="chevron">▾</span>
-    </button>
-    <div class="acc-body"><div class="acc-inner">
-      <div class="control-row">
-        <label>Arc Curvature <span id="val-curve">0.40</span></label>
-        <input type="range" id="ctrl-curve" min="0" max="1" step="0.01" value="0.4"
-          oninput="updateParam('arcCurvature', this.value, 'val-curve')">
-      </div>
-      <div class="control-row">
-        <label>Gaze Speed <span id="val-speed">0.60</span></label>
-        <input type="range" id="ctrl-speed" min="0.1" max="2" step="0.01" value="0.6"
-          oninput="updateParam('gazeSpeed', this.value, 'val-speed')">
-      </div>
-      <div class="control-row">
-        <label>Saccade Jitter <span id="val-jitter">0.20</span></label>
-        <input type="range" id="ctrl-jitter" min="0" max="1" step="0.01" value="0.2"
-          oninput="updateParam('saccadeJitter', this.value, 'val-jitter')">
-      </div>
-    </div></div>
-  </div>
-
-  <div class="accordion open" id="acc-eye">
-    <button class="acc-header" onclick="toggleAcc('acc-eye')">
+  <div class="accordion open" id="acc-eye-shape">
+    <button class="acc-header" onclick="toggleAcc('acc-eye-shape')">
       Eye Shape <span class="chevron">▾</span>
     </button>
-    <div class="acc-body"><div class="acc-inner">
-      <div class="control-row">
-        <label>Openness <span id="val-open">0.85</span></label>
-        <input type="range" id="ctrl-open" min="0.1" max="1" step="0.01" value="0.85"
-          oninput="updateParam('lidOpenness', this.value, 'val-open')">
-      </div>
-      <div class="control-row">
-        <label>Pupil Size <span id="val-pupil">0.38</span></label>
-        <input type="range" id="ctrl-pupil" min="0.1" max="0.7" step="0.01" value="0.38"
-          oninput="updateParam('pupilSize', this.value, 'val-pupil')">
-      </div>
-      <div class="control-row">
-        <label>Blink Rate <span id="val-blink">3.00</span>s</label>
-        <input type="range" id="ctrl-blink" min="1" max="10" step="0.1" value="3"
-          oninput="updateParam('blinkInterval', this.value, 'val-blink')">
-      </div>
-    </div></div>
+    <div class="acc-body"><div class="acc-inner" id="panel-eye"></div></div>
+  </div>
+
+  <div class="accordion open" id="acc-pupil">
+    <button class="acc-header" onclick="toggleAcc('acc-pupil')">
+      Pupil <span class="chevron">▾</span>
+    </button>
+    <div class="acc-body"><div class="acc-inner" id="panel-pupil"></div></div>
+  </div>
+
+  <div class="accordion open" id="acc-blink">
+    <button class="acc-header" onclick="toggleAcc('acc-blink')">
+      Blink <span class="chevron">▾</span>
+    </button>
+    <div class="acc-body"><div class="acc-inner" id="panel-blink"></div></div>
+  </div>
+
+  <div class="accordion open" id="acc-gaze">
+    <button class="acc-header" onclick="toggleAcc('acc-gaze')">
+      Gaze <span class="chevron">▾</span>
+    </button>
+    <div class="acc-body"><div class="acc-inner" id="panel-gaze"></div></div>
   </div>
 
   <div class="accordion open" id="acc-colors">
@@ -410,12 +392,37 @@ const ctx = canvas.getContext('2d');
 
 // ── Parameters (all tweakable) ──
 const params = {
-  arcCurvature:  0.40,
-  gazeSpeed:     0.60,
-  saccadeJitter: 0.20,
-  lidOpenness:   0.85,
-  pupilSize:     0.38,
-  blinkInterval: 3.0,
+  // ── Eye Shape ──
+  eyeRx:           70,
+  eyeRy:           70,
+  eyeRotation:     0,
+  eyeCenterX:      300,
+  eyeCenterY:      260,
+  eyeSpacing:      220,
+
+  // ── Pupil ──
+  pupilSize:       0.40,
+  pupilTravel:     0.38,
+  pupilBiasX:      0,
+  pupilBiasY:      0,
+
+  // ── Blink ──
+  lidOpenness:     0.85,
+  blinkInterval:   3.0,
+  blinkCloseSpeed: 0.07,
+  blinkOpenSpeed:  0.12,
+  blinkHold:       0.05,
+  doubleBlink:     0.15,
+
+  // ── Gaze ──
+  arcCurvature:    0.40,
+  gazeSpeed:       0.60,
+  saccadeJitter:   0.20,
+  gazeRangeX:      1.00,
+  gazeRangeY:      0.60,
+  pauseMin:        1.50,
+  pauseMax:        3.50,
+  microSaccade:    0.02,
 };
 
 // ── Color params ──
@@ -434,11 +441,15 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-// ── Eye geometry (left, right) ──
-const EYES = [
-  { cx: 190, cy: 260, rx: 70, ry: 70 },
-  { cx: 410, cy: 260, rx: 70, ry: 70 },
-];
+// ── Eye geometry — computed each frame from params ──
+function getEyes() {
+  const half = params.eyeSpacing / 2;
+  const rot  = params.eyeRotation * Math.PI / 180;
+  return [
+    { cx: params.eyeCenterX - half, cy: params.eyeCenterY, rx: params.eyeRx, ry: params.eyeRy, rot },
+    { cx: params.eyeCenterX + half, cy: params.eyeCenterY, rx: params.eyeRx, ry: params.eyeRy, rot },
+  ];
+}
 
 // ── Easing functions ──
 const ease = {
@@ -581,15 +592,15 @@ function triggerSaccade(targetX, targetY) {
 
 function randomSaccade() {
   const beh = getBehavior();
-  const r   = beh.gazeRadius;
+  const r = beh.gazeRadius;
   const jitter = params.saccadeJitter;
 
-  const tx = (Math.random() * 2 - 1) * r + (Math.random() * 2 - 1) * jitter * 0.1;
-  const ty = (Math.random() * 2 - 1) * r * 0.6 + (Math.random() * 2 - 1) * jitter * 0.1;
+  const tx = (Math.random() * 2 - 1) * r * params.gazeRangeX + (Math.random() * 2 - 1) * jitter * 0.1;
+  const ty = (Math.random() * 2 - 1) * r * params.gazeRangeY + (Math.random() * 2 - 1) * jitter * 0.1;
 
   triggerSaccade(
     Math.max(-0.9, Math.min(0.9, tx)),
-    Math.max(-0.7, Math.min(0.7, ty))
+    Math.max(-0.9, Math.min(0.9, ty))
   );
 }
 
@@ -620,14 +631,22 @@ function updateBlink(dt) {
       logEvent('blink');
     }
   } else if (b.state === 'closing') {
-    b.t += dt / 0.07;
+    b.t += dt / Math.max(0.01, params.blinkCloseSpeed);
     if (b.t >= 1) { b.t = 1; b.state = 'closed'; }
   } else if (b.state === 'closed') {
     b.timer += dt;
-    if (b.timer >= 0.05) { b.state = 'opening'; b.t = 1; b.timer = 0; }
+    if (b.timer >= params.blinkHold) { b.state = 'opening'; b.t = 1; b.timer = 0; }
   } else if (b.state === 'opening') {
-    b.t -= dt / 0.12;
-    if (b.t <= 0) { b.t = 0; b.state = 'open'; }
+    b.t -= dt / Math.max(0.01, params.blinkOpenSpeed);
+    if (b.t <= 0) {
+      b.t = 0;
+      b.state = 'open';
+      // Double blink: schedule another immediately
+      if (Math.random() < params.doubleBlink) {
+        b.state = 'closing';
+        logEvent('blink ×2');
+      }
+    }
   }
 }
 
@@ -646,8 +665,8 @@ function update(dt) {
       state.arc.active = false;
       state.gazeX = state.arc.endX;
       state.gazeY = state.arc.endY;
-      // Schedule next saccade
-      state.behaviorTimer = -(beh.pauseMin + Math.random() * (beh.pauseMax - beh.pauseMin));
+      // Schedule next saccade using global pause params
+      state.behaviorTimer = -(params.pauseMin + Math.random() * (params.pauseMax - params.pauseMin));
     } else {
       const et = state.arc.easeFn(state.arc.t);
       state.gazeX = bezierPoint(et, state.arc.startX, state.arc.ctrlX, state.arc.endX);
@@ -661,6 +680,13 @@ function update(dt) {
     if (state.behaviorTimer >= 0) {
       randomSaccade();
     }
+    // Micro-saccade drift while holding position
+    if (params.microSaccade > 0) {
+      state.gazeX += (Math.random() - 0.5) * params.microSaccade * 0.008;
+      state.gazeY += (Math.random() - 0.5) * params.microSaccade * 0.008;
+      state.gazeX = Math.max(-0.95, Math.min(0.95, state.gazeX));
+      state.gazeY = Math.max(-0.95, Math.min(0.95, state.gazeY));
+    }
   }
 
   updateBlink(dt);
@@ -671,19 +697,21 @@ function update(dt) {
 // ─────────────────────────────────────────────
 
 function drawEye(eye) {
-  const { cx, cy, rx, ry } = eye;
+  const { cx, cy, rx, ry, rot } = eye;
   const beh = getBehavior();
 
   // Blink squishes ry to zero
-  const openness = beh.lidOpenness() * (1 - state.blink.t);
+  const openness  = beh.lidOpenness() * (1 - state.blink.t);
   const displayRy = ry * openness;
   if (displayRy < 0.5) return;
 
-  // Pupil offset (constrained so it stays inside the eye)
-  const maxOX = rx * 0.38;
-  const maxOY = displayRy * 0.38;
-  const pupilX = cx + state.gazeX * maxOX;
-  const pupilY = cy + state.gazeY * maxOY;
+  // Gaze offset in eye-local space, then rotate into canvas space
+  const travel = params.pupilTravel;
+  const localDx = (state.gazeX + params.pupilBiasX) * rx * travel;
+  const localDy = (state.gazeY + params.pupilBiasY) * displayRy * travel;
+  const cos = Math.cos(rot), sin = Math.sin(rot);
+  const pupilX = cx + localDx * cos - localDy * sin;
+  const pupilY = cy + localDx * sin + localDy * cos;
 
   // Pupil size matches eye aspect ratio
   const pupilRx = rx * params.pupilSize;
@@ -695,20 +723,20 @@ function drawEye(eye) {
   glow.addColorStop(1, hexToRgba(colors.glowColor, 0));
   ctx.fillStyle = glow;
   ctx.beginPath();
-  ctx.ellipse(cx, cy, rx * 1.8, displayRy * 1.8, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy, rx * 1.8, displayRy * 1.8, rot, 0, Math.PI * 2);
   ctx.fill();
 
-  // White eye ellipse (clip so pupil can't escape)
+  // Eye ellipse — clip so pupil stays inside
   ctx.save();
   ctx.beginPath();
-  ctx.ellipse(cx, cy, rx, displayRy, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy, rx, displayRy, rot, 0, Math.PI * 2);
   ctx.fillStyle = colors.eyeColor;
   ctx.fill();
   ctx.clip();
 
-  // Black pupil — same aspect ratio as eye
+  // Pupil — same aspect ratio, rotated with eye
   ctx.beginPath();
-  ctx.ellipse(pupilX, pupilY, pupilRx, pupilRy, 0, 0, Math.PI * 2);
+  ctx.ellipse(pupilX, pupilY, pupilRx, pupilRy, rot, 0, Math.PI * 2);
   ctx.fillStyle = colors.pupilColor;
   ctx.fill();
 
@@ -720,7 +748,7 @@ function draw() {
   ctx.fillStyle = colors.canvasBg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  EYES.forEach(eye => drawEye(eye));
+  getEyes().forEach(eye => drawEye(eye));
 
   // ── Behavior label ──
   const beh = getBehavior();
@@ -859,21 +887,7 @@ function applyLoadedConfig() {
   }
   if (parsed.params) Object.assign(params, parsed.params);
   if (parsed.colors) Object.assign(colors, parsed.colors);
-  [
-    ['ctrl-curve',  'val-curve',  'arcCurvature'],
-    ['ctrl-speed',  'val-speed',  'gazeSpeed'],
-    ['ctrl-jitter', 'val-jitter', 'saccadeJitter'],
-    ['ctrl-open',   'val-open',   'lidOpenness'],
-    ['ctrl-pupil',  'val-pupil',  'pupilSize'],
-    ['ctrl-blink',  'val-blink',  'blinkInterval'],
-  ].forEach(([ctrlId, valId, key]) => {
-    const el = document.getElementById(ctrlId);
-    if (el) {
-      el.value = params[key];
-      document.getElementById(valId).textContent = parseFloat(params[key]).toFixed(2);
-      refreshSlider(el);
-    }
-  });
+  syncAllSliders();
   buildColorPanel();
   document.getElementById('load-wrap').classList.remove('visible');
   saveConfig();
@@ -899,11 +913,95 @@ function refreshSlider(el) {
   el.style.background = `linear-gradient(to right, var(--iris) ${pct}%, #3a3a5c ${pct}%)`;
 }
 
-function updateParam(key, value, labelId) {
+function updateParam(key, value) {
   params[key] = parseFloat(value);
-  document.getElementById(labelId).textContent = parseFloat(value).toFixed(2);
-  refreshSlider(event.target);
+  const el = event.target;
+  const dec = parseInt(el.dataset.dec ?? 2);
+  const valEl = document.getElementById('val-' + key);
+  if (valEl) valEl.textContent = parseFloat(value).toFixed(dec);
+  refreshSlider(el);
   saveConfig();
+}
+
+function makeSlider(key, label, min, max, step, dec = 2) {
+  const row = document.createElement('div');
+  row.className = 'control-row';
+
+  const lbl = document.createElement('label');
+  const valSpan = document.createElement('span');
+  valSpan.id = 'val-' + key;
+  valSpan.textContent = parseFloat(params[key]).toFixed(dec);
+  lbl.appendChild(document.createTextNode(label + ' '));
+  lbl.appendChild(valSpan);
+
+  const inp = document.createElement('input');
+  inp.type = 'range';
+  inp.id = 'ctrl-' + key;
+  inp.min = min; inp.max = max; inp.step = step;
+  inp.value = params[key];
+  inp.dataset.dec = dec;
+  inp.addEventListener('input', function() { updateParam(key, this.value); });
+
+  row.appendChild(lbl);
+  row.appendChild(inp);
+  return inp; // return input so caller can refreshSlider
+}
+
+function buildControlPanels() {
+  const sections = {
+    'panel-eye': [
+      ['eyeRx',        'Width',      10,  200,  1,    0],
+      ['eyeRy',        'Height',     10,  200,  1,    0],
+      ['eyeRotation',  'Rotation',  -45,   45,  0.5,  1],
+      ['eyeCenterX',   'Center X',   50,  550,  1,    0],
+      ['eyeCenterY',   'Center Y',   50,  550,  1,    0],
+      ['eyeSpacing',   'Spacing',    20,  500,  1,    0],
+    ],
+    'panel-pupil': [
+      ['pupilSize',    'Size',      0.05, 0.95, 0.01, 2],
+      ['pupilTravel',  'Travel',    0,    0.90, 0.01, 2],
+      ['pupilBiasX',   'Bias X',   -1,    1,   0.01, 2],
+      ['pupilBiasY',   'Bias Y',   -1,    1,   0.01, 2],
+    ],
+    'panel-blink': [
+      ['lidOpenness',      'Openness',     0.1, 1.0,  0.01, 2],
+      ['blinkInterval',    'Interval',     0.5, 15,   0.1,  1],
+      ['blinkCloseSpeed',  'Close speed',  0.02, 0.5, 0.01, 2],
+      ['blinkOpenSpeed',   'Open speed',   0.02, 0.5, 0.01, 2],
+      ['blinkHold',        'Hold',         0,    0.5, 0.01, 2],
+      ['doubleBlink',      'Double blink', 0,    1.0, 0.01, 2],
+    ],
+    'panel-gaze': [
+      ['arcCurvature',  'Arc curve',   0,    1,   0.01, 2],
+      ['gazeSpeed',     'Speed',       0.1,  3,   0.01, 2],
+      ['saccadeJitter', 'Jitter',      0,    1,   0.01, 2],
+      ['gazeRangeX',    'Range X',     0.05, 3,   0.01, 2],
+      ['gazeRangeY',    'Range Y',     0.05, 2,   0.01, 2],
+      ['pauseMin',      'Pause min',   0.1,  10,  0.1,  1],
+      ['pauseMax',      'Pause max',   0.1,  20,  0.1,  1],
+      ['microSaccade',  'Micro-drift', 0,    1,   0.01, 2],
+    ],
+  };
+
+  Object.entries(sections).forEach(([panelId, controls]) => {
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+    panel.innerHTML = '';
+    controls.forEach(args => refreshSlider(makeSlider(...args)));
+  });
+}
+
+function syncAllSliders() {
+  document.querySelectorAll('input[type="range"][id^="ctrl-"]').forEach(el => {
+    const key = el.id.slice(5); // strip 'ctrl-'
+    if (params[key] !== undefined) {
+      el.value = params[key];
+      const dec = parseInt(el.dataset.dec ?? 2);
+      const valEl = document.getElementById('val-' + key);
+      if (valEl) valEl.textContent = parseFloat(params[key]).toFixed(dec);
+    }
+    refreshSlider(el);
+  });
 }
 
 const logEl = document.getElementById('log');
@@ -919,25 +1017,9 @@ function logEvent(msg) {
 }
 
 loadConfig();
-
-// Sync slider DOM values to (possibly restored) params
-[
-  ['ctrl-curve',  'val-curve',  'arcCurvature'],
-  ['ctrl-speed',  'val-speed',  'gazeSpeed'],
-  ['ctrl-jitter', 'val-jitter', 'saccadeJitter'],
-  ['ctrl-open',   'val-open',   'lidOpenness'],
-  ['ctrl-pupil',  'val-pupil',  'pupilSize'],
-  ['ctrl-blink',  'val-blink',  'blinkInterval'],
-].forEach(([ctrlId, valId, key]) => {
-  const el = document.getElementById(ctrlId);
-  if (el) {
-    el.value = params[key];
-    document.getElementById(valId).textContent = parseFloat(params[key]).toFixed(2);
-  }
-});
-
+buildControlPanels();
 buildColorPanel();
-document.querySelectorAll('input[type="range"]').forEach(refreshSlider);
+syncAllSliders();
 logEvent('system ready');
 logEvent('behavior → idle');
 
