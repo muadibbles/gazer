@@ -944,7 +944,7 @@ function makeSlider(key, label, min, max, step, dec = 2) {
 
   row.appendChild(lbl);
   row.appendChild(inp);
-  return inp; // return input so caller can refreshSlider
+  return { row, inp };
 }
 
 function buildControlPanels() {
@@ -987,7 +987,11 @@ function buildControlPanels() {
     const panel = document.getElementById(panelId);
     if (!panel) return;
     panel.innerHTML = '';
-    controls.forEach(args => refreshSlider(makeSlider(...args)));
+    controls.forEach(args => {
+      const { row, inp } = makeSlider(...args);
+      panel.appendChild(row);
+      refreshSlider(inp);
+    });
   });
 }
 
