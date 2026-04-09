@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(where aider:*)",
-      "Read(//c/Users/filla/**)"
-    ]
-  }
-}
