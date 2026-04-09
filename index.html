@@ -420,15 +420,11 @@ const params = {
 
 // ── Color params ──
 const colors = {
-  stageBg:       '#0a0a0f',
-  canvasBg:      '#000000',
-  irisHighlight: '#5fffd8',
-  irisMid:       '#2abf8e',
-  irisDeep:      '#0d4a36',
-  glowColor:     '#4af7c4',
-  scleraLight:   '#f0f2f8',
-  scleraDark:    '#c8cad8',
-  pupilColor:    '#111111',
+  stageBg:    '#0a0a0f',
+  canvasBg:   '#131318',
+  eyeColor:   '#ffffff',
+  pupilColor: '#000000',
+  glowColor:  '#4af7c4',
 };
 
 function hexToRgba(hex, alpha) {
@@ -440,8 +436,8 @@ function hexToRgba(hex, alpha) {
 
 // ── Eye geometry (left, right) ──
 const EYES = [
-  { cx: 190, cy: 300, rx: 83, ry: 56 },
-  { cx: 410, cy: 300, rx: 83, ry: 56 },
+  { cx: 190, cy: 260, rx: 70, ry: 70 },
+  { cx: 410, cy: 260, rx: 70, ry: 70 },
 ];
 
 // ── Easing functions ──
@@ -678,121 +674,45 @@ function drawEye(eye) {
   const { cx, cy, rx, ry } = eye;
   const beh = getBehavior();
 
-  const pupilX = cx + state.gazeX * (rx * 0.45);
-  const pupilY = cy + state.gazeY * (ry * 0.45);
+  // Blink squishes ry to zero
+  const openness = beh.lidOpenness() * (1 - state.blink.t);
+  const displayRy = ry * openness;
+  if (displayRy < 0.5) return;
 
-  const targetOpen = beh.lidOpenness();
-  const openness   = targetOpen * (1 - state.blink.t);
+  // Pupil offset (constrained so it stays inside the eye)
+  const maxOX = rx * 0.38;
+  const maxOY = displayRy * 0.38;
+  const pupilX = cx + state.gazeX * maxOX;
+  const pupilY = cy + state.gazeY * maxOY;
 
-  // ── Glow ──
-  const glow = ctx.createRadialGradient(cx, cy, 10, cx, cy, rx * 1.4);
-  glow.addColorStop(0, hexToRgba(colors.glowColor, 0.06));
+  // Pupil size matches eye aspect ratio
+  const pupilRx = rx * params.pupilSize;
+  const pupilRy = displayRy * params.pupilSize;
+
+  // Subtle glow behind eye
+  const glow = ctx.createRadialGradient(cx, cy, rx * 0.4, cx, cy, rx * 1.8);
+  glow.addColorStop(0, hexToRgba(colors.glowColor, 0.07));
   glow.addColorStop(1, hexToRgba(colors.glowColor, 0));
   ctx.fillStyle = glow;
-  ctx.fillRect(cx - rx * 1.6, cy - ry * 2, rx * 3.2, ry * 4);
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx * 1.8, displayRy * 1.8, 0, 0, Math.PI * 2);
+  ctx.fill();
 
-  // ── Clip to eye shape ──
+  // White eye ellipse (clip so pupil can't escape)
   ctx.save();
   ctx.beginPath();
-  eyePath(cx, cy, rx, ry, openness);
+  ctx.ellipse(cx, cy, rx, displayRy, 0, 0, Math.PI * 2);
+  ctx.fillStyle = colors.eyeColor;
+  ctx.fill();
   ctx.clip();
 
-  // Sclera
-  const scleraGrad = ctx.createRadialGradient(cx, cy - ry * 0.1, 5, cx, cy, rx);
-  scleraGrad.addColorStop(0, colors.scleraLight);
-  scleraGrad.addColorStop(1, colors.scleraDark);
-  ctx.fillStyle = scleraGrad;
-  ctx.fill();
-
-  // Iris
-  const irisR = rx * 0.42;
-  const irisGrad = ctx.createRadialGradient(pupilX - irisR * 0.2, pupilY - irisR * 0.2, 2, pupilX, pupilY, irisR);
-  irisGrad.addColorStop(0, colors.irisHighlight);
-  irisGrad.addColorStop(0.4, colors.irisMid);
-  irisGrad.addColorStop(1, colors.irisDeep);
+  // Black pupil — same aspect ratio as eye
   ctx.beginPath();
-  ctx.arc(pupilX, pupilY, irisR, 0, Math.PI * 2);
-  ctx.fillStyle = irisGrad;
+  ctx.ellipse(pupilX, pupilY, pupilRx, pupilRy, 0, 0, Math.PI * 2);
+  ctx.fillStyle = colors.pupilColor;
   ctx.fill();
 
-  // Iris detail lines
-  ctx.save();
-  ctx.globalAlpha = 0.15;
-  for (let i = 0; i < 12; i++) {
-    const angle = (i / 12) * Math.PI * 2;
-    ctx.beginPath();
-    ctx.moveTo(pupilX + Math.cos(angle) * irisR * 0.35, pupilY + Math.sin(angle) * irisR * 0.35);
-    ctx.lineTo(pupilX + Math.cos(angle) * irisR * 0.95, pupilY + Math.sin(angle) * irisR * 0.95);
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 0.8;
-    ctx.stroke();
-  }
   ctx.restore();
-
-  // Pupil
-  const pupilR = irisR * params.pupilSize / 0.38;
-  const pupilGrad = ctx.createRadialGradient(pupilX, pupilY, 0, pupilX, pupilY, pupilR);
-  pupilGrad.addColorStop(0, colors.pupilColor);
-  pupilGrad.addColorStop(1, colors.pupilColor);
-  ctx.beginPath();
-  ctx.arc(pupilX, pupilY, pupilR, 0, Math.PI * 2);
-  ctx.fillStyle = pupilGrad;
-  ctx.fill();
-
-  // Catchlight
-  ctx.beginPath();
-  ctx.arc(pupilX - pupilR * 0.28, pupilY - pupilR * 0.28, pupilR * 0.22, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.fill();
-
-  // Small secondary catchlight
-  ctx.beginPath();
-  ctx.arc(pupilX + pupilR * 0.3, pupilY - pupilR * 0.15, pupilR * 0.1, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.4)';
-  ctx.fill();
-
-  ctx.restore(); // end clip
-
-  // ── Eyelid stroke ──
-  ctx.beginPath();
-  eyePath(cx, cy, rx, ry, openness);
-  ctx.strokeStyle = 'rgba(20,20,30,0.9)';
-  ctx.lineWidth = 3;
-  ctx.stroke();
-
-  // ── Upper lid shadow ──
-  ctx.save();
-  ctx.beginPath();
-  eyePath(cx, cy, rx, ry, openness);
-  ctx.clip();
-  const lidShadow = ctx.createLinearGradient(cx, cy - ry * openness, cx, cy - ry * openness * 0.3);
-  lidShadow.addColorStop(0, 'rgba(15,15,25,0.5)');
-  lidShadow.addColorStop(1, 'rgba(15,15,25,0)');
-  ctx.fillStyle = lidShadow;
-  ctx.fillRect(cx - rx - 10, cy - ry * 2, (rx + 10) * 2, ry * 2);
-  ctx.restore();
-
-  // ── Arc trajectory visualization (debug) ──
-  if (state.arc.active) {
-    ctx.save();
-    ctx.globalAlpha = 0.12;
-    ctx.beginPath();
-    const steps = 30;
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const bx = bezierPoint(t, state.arc.startX, state.arc.ctrlX, state.arc.endX);
-      const by = bezierPoint(t, state.arc.startY, state.arc.ctrlY, state.arc.endY);
-      const px = cx + bx * (rx * 0.45);
-      const py = cy + by * (ry * 0.45);
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    }
-    ctx.strokeStyle = colors.glowColor;
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([3, 4]);
-    ctx.stroke();
-    ctx.restore();
-  }
 }
 
 function draw() {
@@ -810,28 +730,6 @@ function draw() {
   ctx.fillText(beh.label, 24, canvas.height - 24);
 }
 
-// ─────────────────────────────────────────────
-//  EYE PATH HELPER
-// ─────────────────────────────────────────────
-
-function eyePath(cx, cy, rx, ry, openness) {
-  const top    = cy - ry * openness;
-  const bottom = cy + ry * 0.75;
-
-  ctx.moveTo(cx - rx, cy);
-  // Upper lid
-  ctx.bezierCurveTo(
-    cx - rx * 0.5, top,
-    cx + rx * 0.5, top,
-    cx + rx, cy
-  );
-  // Lower lid
-  ctx.bezierCurveTo(
-    cx + rx * 0.5, bottom,
-    cx - rx * 0.5, bottom,
-    cx - rx, cy
-  );
-}
 
 // ─────────────────────────────────────────────
 //  MOUSE CONTROL — click to look
@@ -919,15 +817,11 @@ function buildColorPanel() {
   panel.innerHTML = '';
   const stage = document.querySelector('.stage');
   [
-    ['stageBg',       'Stage bg',  v => stage.style.background = v],
-    ['canvasBg',      'Canvas bg', null],
-    ['irisHighlight', 'Iris highlight', null],
-    ['irisMid',       'Iris mid',       null],
-    ['irisDeep',      'Iris deep',      null],
-    ['glowColor',     'Glow',           null],
-    ['scleraLight',   'Sclera light',   null],
-    ['scleraDark',    'Sclera dark',    null],
-    ['pupilColor',    'Pupil',          null],
+    ['stageBg',    'Stage bg',  v => stage.style.background = v],
+    ['canvasBg',   'Canvas bg', null],
+    ['eyeColor',   'Eye',       null],
+    ['pupilColor', 'Pupil',     null],
+    ['glowColor',  'Glow',      null],
   ].forEach(([key, label, onChange]) => panel.appendChild(makeColorRow(key, label, onChange)));
   stage.style.background = colors.stageBg;
 }
