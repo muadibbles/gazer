@@ -2156,9 +2156,9 @@ function drawBlinkLid(eye) {
 
   ctx.save();
 
-  // Clip both lid fills to the eye ellipse for clean rounded boundaries
+  // Expand clip by 1px to cover antialiased edge pixels of the white iris fill
   ctx.beginPath();
-  ctx.ellipse(cx, cy, rx, displayRy, rot, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy, rx + 1, displayRy + 1, rot, 0, Math.PI * 2);
   ctx.clip();
 
   ctx.translate(cx, cy);
@@ -2167,8 +2167,8 @@ function drawBlinkLid(eye) {
   // ── Upper lid (face/background colour sweeping down) ──
   ctx.fillStyle = colors.lidColor;
   ctx.beginPath();
-  ctx.moveTo(-rx,  -displayRy - 2);
-  ctx.lineTo( rx,  -displayRy - 2);
+  ctx.moveTo(-rx,  -displayRy * 3);    // well above eye — no gap at top edge
+  ctx.lineTo( rx,  -displayRy * 3);
   ctx.lineTo( rx,   edgeY);
   ctx.quadraticCurveTo(0, edgeY - bow, -rx, edgeY);
   ctx.closePath();
