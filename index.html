@@ -2263,7 +2263,7 @@ headGroup.add(screen);
 
 // Wheels — cylinders rotated to lie on their sides
 const wheelGeo  = new THREE.CylinderGeometry(WR, WR, WT, 28);
-const hubGeo    = new THREE.CylinderGeometry(WR * 0.38, WR * 0.38, WT + 0.005, 20);
+const hubGeo    = new THREE.CylinderGeometry(WR * 0.76, WR * 0.76, WT + 0.005, 20);
 const hubCapMat = new THREE.MeshLambertMaterial({ color: 0xc8c8c4 });
 [-1, 1].forEach(side => {
   const wheel = new THREE.Mesh(wheelGeo, wheelMat);
