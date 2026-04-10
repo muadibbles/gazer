@@ -130,9 +130,16 @@ The behavior controller is designed for expansion — each behavior is just a co
 - [x] Conversational states — listening, processing, speaking, waiting
 - [x] Affective states — engaged, confused, pleased, uncomfortable
 - [x] Operational states — waking, resting, interrupted
-- [ ] State compositor — combine attention + conversational + affective layers so e.g. `listening` + `engaged` looks different from `listening` + `confused`
-- [ ] State machine transitions — define legal transitions and blend durations between states
-- [ ] External state driver — WebSocket / LLM inference pushes state changes
+- [ ] State compositor — combine attention + affective layers; attention governs gaze/saccade, affect governs expression (brow, lid, mouth); blend ratio slider
+- [ ] Micro-expressions — brief flashes of affect (200ms) that don't fully commit, then return to base state
+- [ ] State machine — legal transition graph, blend durations between states (fast snap for `interrupted`, slow melt for `pleased → uncomfortable`)
+
+### Emotion Engine
+- [ ] Pressure/scoring system — each state has a "pressure" that builds over time or from stimulus; highest pressure wins; novelty decay makes gazer restless
+- [ ] Rule engine — simple if/then rules mapping external events to state changes (`speaking=true → attention:speaking, affect:engaged`)
+- [ ] Transition enforcer — prevents illegal jumps (e.g. `resting → interrupted` must go through `alert`), enforces hold times
+- [ ] External state driver — WebSocket / LLM / audio pipeline pushes `{ attention, affect }` pairs to the compositor
+- [ ] Drive layer — what gazer wants when no external input is present; bridges into personal time
 
 ### Agency & Memory
 - [ ] Gazer personal time — when not attending to an operator target or external stimulus, gazer explores the space autonomously and builds its own spatial memories: locations it has looked at, how long, how often. Over time these memories shape where it chooses to look during idle, giving it a sense of accumulated experience and preference.
