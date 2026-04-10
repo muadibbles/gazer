@@ -95,6 +95,9 @@ The behavior controller is designed for expansion — each behavior is just a co
 - [ ] FPS counter — frame rate display, useful for hardware porting
 - [ ] Frame timing graph — sparkline of frame render times
 
+### Agency & Memory
+- [ ] Gazer personal time — when not attending to an operator target or external stimulus, gazer explores the space autonomously and builds its own spatial memories: locations it has looked at, how long, how often. Over time these memories shape where it chooses to look during idle, giving it a sense of accumulated experience and preference.
+
 ### Expression System
 - [ ] Emotion layer (surprise, disgust, joy) — drives eyelids, brows, mouth together as named presets
 - [ ] Environmental context awareness — context tags (e.g. "Meeting", "Reading") influence behavior parameters
