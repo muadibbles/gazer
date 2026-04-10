@@ -2262,13 +2262,21 @@ screen.position.z = C / 2 + 0.004;
 headGroup.add(screen);
 
 // Wheels — cylinders rotated to lie on their sides
-const wheelGeo = new THREE.CylinderGeometry(WR, WR, WT, 28);
+const wheelGeo  = new THREE.CylinderGeometry(WR, WR, WT, 28);
+const hubGeo    = new THREE.CylinderGeometry(WR * 0.38, WR * 0.38, WT + 0.005, 20);
+const hubCapMat = new THREE.MeshLambertMaterial({ color: 0xc8c8c4 });
 [-1, 1].forEach(side => {
   const wheel = new THREE.Mesh(wheelGeo, wheelMat);
   wheel.rotation.z  = Math.PI / 2;
   wheel.position.set(side * (C / 2 + WT / 2 + 0.02), WR, 0);
   wheel.castShadow  = true;
   robot.add(wheel);
+
+  // Hub cap — slightly proud of each face
+  const hub = new THREE.Mesh(hubGeo, hubCapMat);
+  hub.rotation.z = Math.PI / 2;
+  hub.position.set(side * (C / 2 + WT / 2 + 0.02), WR, 0);
+  robot.add(hub);
 });
 
 // ── Resize ──
