@@ -21,54 +21,9 @@ An exploration of the 12 principles of animation applied to robotics — using a
 
 ## Behaviors
 
-All 15 behaviors are available to both compositor layers independently.
+15 behaviors across five groups: Classic, Attention, Conversational, Affective, and Operational. Each defines gaze parameters (range, speed, easing) and expression parameters (lids, brows, mouth, blink rate) — any behavior can be used as a template for either compositor layer independently.
 
-### Classic
-|Behavior   |Gaze Range          |Speed |Blink Rate   |Feel                |Enter  |
-|-----------|--------------------|------|-------------|--------------------| ------|
-|`idle`     |moderate            |normal|normal       |relaxed, wandering  |0.40s  |
-|`attentive`|tight (center focus)|fast  |slow         |alert, tracking     |0.20s  |
-|`curious`  |wide                |medium|slightly slow|scanning, exploring |0.32s  |
-|`sleepy`   |small               |slow  |very high    |heavy-lidded, drowsy|0.90s  |
-
-### Attention
-|Behavior    |Gaze Range|Speed|Blink Rate|Feel                          |Enter  |
-|------------|----------|-----|----------|------------------------------|-------|
-|`alert`     |very tight|very fast|very slow|snapped to source, wide-eyed |0.06s  |
-|`searching` |very wide |medium-fast|moderate|scanning, seeking            |0.28s  |
-
-### Conversational
-|Behavior     |Gaze Range|Speed|Blink Rate|Feel                         |Enter  |
-|-------------|----------|-----|----------|-----------------------------|-------|
-|`listening`  |tight     |slow |slow      |receptive, focused on speaker|0.40s  |
-|`processing` |medium    |slow |high      |inward, defocused, thinking  |0.55s  |
-|`speaking`   |medium    |normal|normal   |natural, expressive          |0.28s  |
-|`waiting`    |medium    |slow |slightly high|patient, expectant        |0.45s  |
-
-### Affective
-|Behavior       |Gaze Range|Speed|Blink Rate|Feel                       |Enter  |
-|---------------|----------|-----|----------|---------------------------|-------|
-|`engaged`      |tight     |fast |very slow |bright, leaning in         |0.25s  |
-|`confused`     |medium    |medium|moderate |erratic, furrowed          |0.35s  |
-|`pleased`      |medium    |normal|high     |squinting smile, happy     |0.50s  |
-|`uncomfortable`|wide      |medium|high     |averted gaze, nervous      |0.70s  |
-
-### Operational
-|Behavior      |Gaze Range|Speed   |Blink Rate|Feel                      |Enter  |
-|--------------|----------|--------|----------|--------------------------|-------|
-|`waking`      |very tight|sluggish|very high |groggy, coming online     |1.20s  |
-|`resting`     |tiny      |very slow|very high|nearly shut down          |1.50s  |
-|`interrupted` |snap      |very fast|very low |startle, instant redirect |0.00s ⚡|
-
-`interrupted` also auto-returns to the previous state after 0.5s (`maxHold`).
-
-### Pair-specific transition overrides
-| Pair | Duration | Feel |
-|------|----------|------|
-| `pleased → uncomfortable` | 0.90s | reluctant, slow shift |
-| `uncomfortable → pleased` | 0.55s | cautious brightening |
-| `resting → interrupted` | 0.08s | groggy startle |
-| `resting → alert` | 0.25s | slow state takes a breath first |
+See [docs/behaviors.md](docs/behaviors.md) for the full reference, pair-specific transition overrides, and notes on combining layers.
 
 -----
 
@@ -132,24 +87,9 @@ The compositor is designed for external driving — each layer can be set indepe
 
 ## 12 Principles of Animation
 
-From Johnston & Thomas, *The Illusion of Life* (Disney, 1981). Gazer uses these as a design checklist.
+From Johnston & Thomas, *The Illusion of Life* (Disney, 1981) — the design checklist for the project. Most principles are implemented; exaggeration and overlap have the most room to grow.
 
-| # | Principle | Description | Status |
-|---|-----------|-------------|--------|
-| 1 | **Squash & stretch** | Deformation conveys weight and flexibility | ✅ eye deforms during saccades; easing on entry/exit of each state |
-| 2 | **Anticipation** | Wind-up before action signals what's coming | ✅ brief counter-move before saccade fires |
-| 3 | **Staging** | Clear composition, one idea at a time | n/a — single subject |
-| 4 | **Straight ahead vs pose-to-pose** | Two approaches to planning movement | n/a |
-| 5 | **Follow-through & overlapping action** | Parts settle independently after movement stops | ✅ overshoot spring on saccades; head/body spring overshoot; pupils → face → head → body cascade at different rates |
-| 6 | **Slow in and slow out** | Ease in/out — most motion happens in the middle | ✅ easing library on saccades; head/body spring physics eases in *and* out; per-state `enterEase` shapes every compositor transition |
-| 7 | **Arcs** | Natural motion follows curved paths, not straight lines | ✅ quadratic bezier saccades; head tilts into yaw turns + body leans into rotation — 3D motion traces curves, not flat angles |
-| 8 | **Secondary action** | Supporting motions that reinforce the primary one | ✅ face/head/body cascade; brow and mouth react to blink |
-| 9 | **Timing** | Number of frames determines weight and mood | ✅ per-behavior speed, pause, and blink timing; per-state `enterDur` |
-| 10 | **Exaggeration** | Push beyond realism to read as more real | 🔨 behavior states push values — room to go further |
-| 11 | **Solid drawing** | Volume, weight, balance (the 3D-thinking principle) | ✅ three.js robot body with physical presence |
-| 12 | **Appeal** | Charisma — the thing that makes you want to watch | the whole project |
-
-Areas with room to grow: **exaggeration** (states could push harder at extremes; `interrupted`/`alert` could squash harder, velocities could spike further) and **overlap** (lids, brows, mouth each settling at different rates after a behavior change).
+See [docs/animation-principles.md](docs/animation-principles.md) for the full status table and notes on where to push further.
 
 -----
 
