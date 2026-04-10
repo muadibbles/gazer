@@ -151,8 +151,16 @@ See [docs/drive-system.md](docs/drive-system.md) for the full design.
 - [x] Transition enforcer — `transEnforcer` table reroutes illegal drive-originated jumps through intermediate states (e.g. `resting→anything` goes via `waking`); blend-guard prevents drive from interrupting in-progress transitions
 - [ ] Personal time — spatial memory of dwell history shapes idle gaze over a session
 
-### Expression System
-- [ ] Environmental context awareness — context tags (e.g. "Meeting", "Reading") influence behavior parameters
+### Environmental Triggers
+
+See [docs/environmental-triggers.md](docs/environmental-triggers.md) for the full design and implementation notes.
+
+- [ ] Time of day — scheduler adjusts drive profile weights through a day/night curve; time-since-last-interaction builds restlessness
+- [ ] Presence detection — PIR or camera; person enters/leaves room triggers `attentive`/`searching`/`resting` pressure cycles
+- [ ] Ambient audio — microphone amplitude envelope drives arousal level; transients fire `startle` events
+- [ ] System state — CPU load, battery, network status, errors feed drive events with no extra hardware
+- [ ] Proximity — distance to nearest person shapes `comfortable`/`uncomfortable` pressure and gaze aversion
+- [ ] Calendar / schedule context — meeting, focus, idle modes shift drive profile baseline
 
 ### Animation Hierarchy
 - [x] Global face translation — subtle whole-face shift toward gaze target, parent transform above gaze
