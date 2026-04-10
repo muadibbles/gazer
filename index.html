@@ -250,9 +250,23 @@ input[type="range"]::-webkit-slider-thumb {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .comp-trans-row label { font-size: 10px; color: var(--text); white-space: nowrap; }
+.comp-trans-bar {
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+#comp-trans-fill {
+  height: 100%;
+  width: 100%;
+  background: transparent;
+  border-radius: 1px;
+  transition: background 0.1s;
+}
 /* Affect (expression) layer active button — accent color */
 .affect-btn.active {
   background: var(--accent);
@@ -568,6 +582,9 @@ input[type="checkbox"].grid-cb:checked::after {
         <span style="color:var(--border)">+</span>
         <span class="comp-status-e">E: <span id="comp-status-e-val">IDLE</span></span>
       </div>
+
+      <!-- Transition progress bar (teal = blending, orange = hold countdown) -->
+      <div class="comp-trans-bar"><div id="comp-trans-fill"></div></div>
 
       <!-- Transition speed -->
       <div class="comp-trans-row">
@@ -1001,11 +1018,16 @@ const state = {
   },
 
   // Compositor — attention layer (gaze/saccade) + affect layer (expression)
-  attn:          'idle',   // gaze/saccade behavior key
-  affect:        'idle',   // expression behavior key
-  transBlend:    1.0,      // 0 = fully old state, 1 = fully new state
-  transOldAttn:  'idle',   // previous attention key (for blending)
-  transOldAffect:'idle',   // previous affect key (for blending)
+  attn:           'idle',            // gaze/saccade behavior key
+  affect:         'idle',            // expression behavior key
+  transBlend:     1.0,               // 0 = fully old state, 1 = fully new state
+  transOldAttn:   'idle',            // previous attention key (for blending)
+  transOldAffect: 'idle',            // previous affect key (for blending)
+  transDur:       0.3,               // actual duration for the active transition
+  transEaseFn:    null,              // easing fn applied to transBlend (set per transition)
+  holdTimer:      0,                 // countdown for maxHold auto-return
+  holdReturnAttn:   null,            // attn key to return to on hold expiry (null = don't change)
+  holdReturnAffect: null,            // affect key to return to on hold expiry
   behaviorTimer: 0,
 
   // Arc trail
@@ -1046,8 +1068,13 @@ let lastTime = null;
 // ─────────────────────────────────────────────
 
 const behaviors = {
+  // enterDur  — blend-in time (seconds) when entering this state
+  // enterEase — easing curve applied to the blend progress
+  // maxHold   — auto-return to previous state after this many seconds (optional)
+
   idle: {
     label: 'IDLE',
+    enterDur: 0.40, enterEase: 'inOutCubic',
     gazeRadius:    0.35,
     pauseMin:      1.5,
     pauseMax:      3.5,
@@ -1055,18 +1082,16 @@ const behaviors = {
     speedMult:     1.0,
     blinkMult:     1.0,
     lidOpenness:   () => params.lidOpenness,
-    // Slight natural droop on upper lid — relaxed, not fully awake
     upperLid:      () => Math.min(1, params.upperLidPos + 0.10),
     lowerLid:      () => Math.min(1, params.lowerLidPos + 0.00),
-    // Neutral brows, very slight natural arch
     browRaise:     () => 0,
     browTilt:      () => 0,
     browArch:      () => 0,
-    // Slight resting smile — at ease
     mouthCurve:    () => 8,
   },
   attentive: {
     label: 'ATTENTIVE',
+    enterDur: 0.20, enterEase: 'outQuart',
     gazeRadius:    0.15,
     pauseMin:      0.3,
     pauseMax:      0.8,
@@ -1074,18 +1099,16 @@ const behaviors = {
     speedMult:     2.2,
     blinkMult:     0.4,
     lidOpenness:   () => Math.min(1, params.lidOpenness * 1.1),
-    // Lids pulled wide open — alert, tracking
     upperLid:      () => Math.max(0, params.upperLidPos - 0.05),
     lowerLid:      () => Math.min(1, params.lowerLidPos + 0.06),
-    // Brows raised and pulled inward — focused, intent
     browRaise:     () => 12,
-    browTilt:      () => 4,   // inner corners down = stern focus
+    browTilt:      () => 4,
     browArch:      () => 6,
-    // Tight flat line — serious, focused
     mouthCurve:    () => -6,
   },
   curious: {
     label: 'CURIOUS',
+    enterDur: 0.32, enterEase: 'outBack',
     gazeRadius:    0.7,
     pauseMin:      0.5,
     pauseMax:      1.5,
@@ -1093,18 +1116,16 @@ const behaviors = {
     speedMult:     1.4,
     blinkMult:     0.8,
     lidOpenness:   () => params.lidOpenness,
-    // Neutral lids — open and scanning, no strong expression
     upperLid:      () => Math.min(1, params.upperLidPos + 0.02),
     lowerLid:      () => Math.min(1, params.lowerLidPos + 0.00),
-    // One brow effectively raised — quizzical, outer corners tilted up
     browRaise:     () => 8,
-    browTilt:      () => -6,  // outer corners down = quizzical
+    browTilt:      () => -6,
     browArch:      () => 10,
-    // Open slight smile — engaged, interested
     mouthCurve:    () => 16,
   },
   sleepy: {
     label: 'SLEEPY',
+    enterDur: 0.90, enterEase: 'inOutCubic',
     gazeRadius:    0.2,
     pauseMin:      3.0,
     pauseMax:      6.0,
@@ -1123,6 +1144,7 @@ const behaviors = {
   // ── Attention ──────────────────────────────────────────────────────────────
   alert: {
     label: 'ALERT',
+    enterDur: 0.06, enterEase: 'outQuart',  // fast snap
     gazeRadius:    0.08,
     pauseMin:      0.08, pauseMax: 0.25,
     easeFn:        () => ease.inOutQuint,
@@ -1131,13 +1153,14 @@ const behaviors = {
     lidOpenness:   () => Math.min(1, params.lidOpenness * 1.18),
     upperLid:      () => Math.max(0, params.upperLidPos - 0.10),
     lowerLid:      () => Math.min(1, params.lowerLidPos + 0.08),
-    browRaise:     () => 20,   // shot up — startled
-    browTilt:      () =>  2,   // slight inward pull = concern
+    browRaise:     () => 20,
+    browTilt:      () =>  2,
     browArch:      () =>  6,
-    mouthCurve:    () =>  0,   // flat — tense
+    mouthCurve:    () =>  0,
   },
   searching: {
     label: 'SEARCHING',
+    enterDur: 0.28, enterEase: 'outBack',
     gazeRadius:    0.88,
     pauseMin:      0.18, pauseMax: 0.55,
     easeFn:        () => ease.outBack,
@@ -1146,8 +1169,8 @@ const behaviors = {
     lidOpenness:   () => Math.min(1, params.lidOpenness * 1.06),
     upperLid:      () => Math.max(0, params.upperLidPos - 0.03),
     lowerLid:      () => Math.min(1, params.lowerLidPos + 0.02),
-    browRaise:     () =>  8,   // raised — seeking
-    browTilt:      () => -4,   // outer corners down = quizzical
+    browRaise:     () =>  8,
+    browTilt:      () => -4,
     browArch:      () =>  8,
     mouthCurve:    () =>  4,
   },
@@ -1155,6 +1178,7 @@ const behaviors = {
   // ── Conversational ─────────────────────────────────────────────────────────
   listening: {
     label: 'LISTENING',
+    enterDur: 0.40, enterEase: 'inOutCubic',
     gazeRadius:    0.20,
     pauseMin:      0.8,  pauseMax: 1.8,
     easeFn:        () => ease.inOutCubic,
@@ -1163,13 +1187,14 @@ const behaviors = {
     lidOpenness:   () => params.lidOpenness,
     upperLid:      () => Math.max(0, params.upperLidPos - 0.02),
     lowerLid:      () => Math.min(1, params.lowerLidPos + 0.00),
-    browRaise:     () =>  6,   // receptive, open
-    browTilt:      () =>  2,   // slight inward = engaged
+    browRaise:     () =>  6,
+    browTilt:      () =>  2,
     browArch:      () =>  4,
-    mouthCurve:    () =>  8,   // soft, attentive
+    mouthCurve:    () =>  8,
   },
   processing: {
     label: 'PROCESSING',
+    enterDur: 0.55, enterEase: 'inOutCubic',
     gazeRadius:    0.42,
     pauseMin:      1.0,  pauseMax: 2.6,
     easeFn:        () => ease.inOutCubic,
@@ -1178,13 +1203,14 @@ const behaviors = {
     lidOpenness:   () => params.lidOpenness * 0.88,
     upperLid:      () => Math.min(1, params.upperLidPos + 0.12),
     lowerLid:      () => Math.min(1, params.lowerLidPos + 0.04),
-    browRaise:     () => -5,   // slight furrow — thinking hard
-    browTilt:      () =>  9,   // inner corners down = concentration
+    browRaise:     () => -5,
+    browTilt:      () =>  9,
     browArch:      () => -4,
-    mouthCurve:    () => -4,   // slight purse
+    mouthCurve:    () => -4,
   },
   speaking: {
     label: 'SPEAKING',
+    enterDur: 0.28, enterEase: 'outBack',
     gazeRadius:    0.28,
     pauseMin:      0.4,  pauseMax: 1.0,
     easeFn:        () => ease.outBack,
@@ -1193,13 +1219,14 @@ const behaviors = {
     lidOpenness:   () => params.lidOpenness,
     upperLid:      () => Math.min(1, params.upperLidPos + 0.02),
     lowerLid:      () => Math.min(1, params.lowerLidPos + 0.00),
-    browRaise:     () =>  4,   // animated, expressive
+    browRaise:     () =>  4,
     browTilt:      () => -2,
     browArch:      () =>  4,
-    mouthCurve:    () => 12,   // engaged smile
+    mouthCurve:    () => 12,
   },
   waiting: {
     label: 'WAITING',
+    enterDur: 0.45, enterEase: 'inOutCubic',
     gazeRadius:    0.30,
     pauseMin:      1.5,  pauseMax: 3.2,
     easeFn:        () => ease.inOutCubic,
@@ -1208,7 +1235,7 @@ const behaviors = {
     lidOpenness:   () => params.lidOpenness * 0.96,
     upperLid:      () => Math.min(1, params.upperLidPos + 0.05),
     lowerLid:      () => Math.min(1, params.lowerLidPos + 0.00),
-    browRaise:     () =>  5,   // slightly raised — expectant
+    browRaise:     () =>  5,
     browTilt:      () =>  1,
     browArch:      () =>  3,
     mouthCurve:    () =>  3,
@@ -1217,6 +1244,7 @@ const behaviors = {
   // ── Affective ──────────────────────────────────────────────────────────────
   engaged: {
     label: 'ENGAGED',
+    enterDur: 0.25, enterEase: 'outBack',   // leaning in
     gazeRadius:    0.16,
     pauseMin:      0.25, pauseMax: 0.70,
     easeFn:        () => ease.inOutQuint,
@@ -1225,53 +1253,56 @@ const behaviors = {
     lidOpenness:   () => Math.min(1, params.lidOpenness * 1.14),
     upperLid:      () => Math.max(0, params.upperLidPos - 0.08),
     lowerLid:      () => Math.min(1, params.lowerLidPos + 0.06),
-    browRaise:     () => 16,   // bright and interested
+    browRaise:     () => 16,
     browTilt:      () =>  2,
     browArch:      () => 10,
-    mouthCurve:    () => 18,   // open, warm smile
+    mouthCurve:    () => 18,
   },
   confused: {
     label: 'CONFUSED',
+    enterDur: 0.35, enterEase: 'inOutCubic',
     gazeRadius:    0.48,
     pauseMin:      0.28, pauseMax: 0.85,
-    easeFn:        () => ease.outBack,   // slight erratic overshoot
+    easeFn:        () => ease.outBack,
     speedMult:     0.9,
     blinkMult:     1.25,
     lidOpenness:   () => params.lidOpenness * 0.92,
     upperLid:      () => Math.min(1, params.upperLidPos + 0.10),
     lowerLid:      () => Math.min(1, params.lowerLidPos + 0.02),
-    browRaise:     () => -6,   // lowered center
-    browTilt:      () => 11,   // inner corners down = confused furrow
+    browRaise:     () => -6,
+    browTilt:      () => 11,
     browArch:      () => -5,
     mouthCurve:    () => -8,
   },
   pleased: {
     label: 'PLEASED',
+    enterDur: 0.50, enterEase: 'outBack',   // warm bloom
     gazeRadius:    0.30,
     pauseMin:      0.8,  pauseMax: 2.0,
     easeFn:        () => ease.outBack,
     speedMult:     1.0,
-    blinkMult:     1.9,   // happy blinks
-    lidOpenness:   () => params.lidOpenness * 0.86,   // happy squint
+    blinkMult:     1.9,
+    lidOpenness:   () => params.lidOpenness * 0.86,
     upperLid:      () => Math.min(1, params.upperLidPos + 0.14),
     lowerLid:      () => Math.min(1, params.lowerLidPos + 0.06),
     browRaise:     () => 10,
-    browTilt:      () => -8,  // outer corners up = happy
+    browTilt:      () => -8,
     browArch:      () => 14,
-    mouthCurve:    () => 30,  // big smile
+    mouthCurve:    () => 30,
   },
   uncomfortable: {
     label: 'UNCOMFORTABLE',
-    gazeRadius:    0.58,   // averted, looking away
+    enterDur: 0.70, enterEase: 'inOutCubic',  // reluctant, slow
+    gazeRadius:    0.58,
     pauseMin:      0.35,   pauseMax: 0.85,
     easeFn:        () => ease.outQuart,
     speedMult:     1.2,
-    blinkMult:     1.9,   // nervous blinks
+    blinkMult:     1.9,
     lidOpenness:   () => params.lidOpenness * 0.88,
     upperLid:      () => Math.min(1, params.upperLidPos + 0.14),
     lowerLid:      () => Math.min(1, params.lowerLidPos + 0.04),
     browRaise:     () => -2,
-    browTilt:      () =>  7,  // inner corners up = worried
+    browTilt:      () =>  7,
     browArch:      () => -4,
     mouthCurve:    () => -14,
   },
@@ -1279,6 +1310,7 @@ const behaviors = {
   // ── Operational ────────────────────────────────────────────────────────────
   waking: {
     label: 'WAKING',
+    enterDur: 1.20, enterEase: 'inOutCubic',  // slow emergence
     gazeRadius:    0.10,
     pauseMin:      0.5,  pauseMax: 1.5,
     easeFn:        () => ease.outQuart,
@@ -1294,6 +1326,7 @@ const behaviors = {
   },
   resting: {
     label: 'RESTING',
+    enterDur: 1.50, enterEase: 'inOutCubic',  // slow drift to rest
     gazeRadius:    0.08,
     pauseMin:      4.5,  pauseMax: 9.0,
     easeFn:        () => ease.outQuart,
@@ -1309,6 +1342,8 @@ const behaviors = {
   },
   interrupted: {
     label: 'INTERRUPTED',
+    enterDur: 0.0, enterEase: 'outQuart',  // instant snap
+    maxHold:  0.5,                          // auto-return after 0.5s
     gazeRadius:    0.04,
     pauseMin:      0.04, pauseMax: 0.15,
     easeFn:        () => ease.inOutQuint,
@@ -1317,11 +1352,21 @@ const behaviors = {
     lidOpenness:   () => Math.min(1, params.lidOpenness * 1.22),
     upperLid:      () => Math.max(0, params.upperLidPos - 0.12),
     lowerLid:      () => Math.min(1, params.lowerLidPos + 0.10),
-    browRaise:     () => 22,   // max raised — startle
+    browRaise:     () => 22,
     browTilt:      () =>  0,
     browArch:      () =>  8,
-    mouthCurve:    () =>  0,   // neutral, frozen mid-expression
+    mouthCurve:    () =>  0,
   },
+};
+
+// Pair-specific transition duration overrides { 'from→to': seconds }
+const transTable = {
+  'pleased→uncomfortable':   0.90,  // reluctant, slow shift
+  'uncomfortable→pleased':   0.55,  // cautious brightening
+  'resting→interrupted':     0.08,  // groggy startle — not instant but fast
+  'waking→interrupted':      0.08,
+  'resting→alert':           0.25,  // slow state must take a breath first
+  'resting→attentive':       0.35,
 };
 
 // ─────────────────────────────────────────────
@@ -1336,6 +1381,9 @@ function getCompositor() {
   const oldAtt = behaviors[state.transOldAttn]   || att;
   const oldAff = behaviors[state.transOldAffect] || aff;
   const t      = state.transBlend;
+
+  // Apply per-transition easing to the raw blend progress
+  const t = state.transEaseFn ? state.transEaseFn(state.transBlend) : state.transBlend;
 
   // Blend a pair of plain numbers
   const ln = (a, b) => a + (b - a) * t;
@@ -1667,9 +1715,23 @@ function update(dt) {
     }
   }
 
-  // Compositor transition blend — advances 0→1 at rate = 1/transitionDur
+  // Compositor transition blend — advances 0→1 using the per-transition duration
   if (state.transBlend < 1) {
-    state.transBlend = Math.min(1, state.transBlend + dt / Math.max(0.01, params.transitionDur));
+    state.transBlend = Math.min(1, state.transBlend + dt / Math.max(0.001, state.transDur));
+  }
+
+  // Hold timer — auto-return from states with maxHold (e.g. interrupted)
+  if (state.holdTimer > 0) {
+    state.holdTimer -= dt;
+    if (state.holdTimer <= 0) {
+      state.holdTimer = 0;
+      const ra = state.holdReturnAttn;
+      const re = state.holdReturnAffect;
+      state.holdReturnAttn   = null;
+      state.holdReturnAffect = null;
+      if (ra !== null) setAttn(ra);
+      if (re !== null) setAffect(re);
+    }
   }
 
   updateBlink(dt);
@@ -2144,6 +2206,28 @@ function draw() {
   ctx.fillStyle = hexToRgba(colors.glowColor, 0.4);
   ctx.letterSpacing = '0.2em';
   ctx.fillText(beh.label, 24, canvas.height - 24);
+
+  updateCompUI();
+}
+
+function updateCompUI() {
+  const fill = document.getElementById('comp-trans-fill');
+  if (!fill) return;
+  const inHold = state.holdTimer > 0;
+  if (inHold) {
+    // Drain bar as hold counts down (orange)
+    const beh = behaviors[state.attn] || behaviors.idle;
+    const pct  = (state.holdTimer / (beh.maxHold || 1) * 100).toFixed(1) + '%';
+    fill.style.width      = pct;
+    fill.style.background = 'var(--accent)';
+  } else if (state.transBlend < 1) {
+    // Fill bar as blend progresses (teal)
+    fill.style.width      = (state.transBlend * 100).toFixed(1) + '%';
+    fill.style.background = 'var(--iris)';
+  } else {
+    fill.style.width      = '0%';
+    fill.style.background = 'transparent';
+  }
 }
 
 
@@ -2315,39 +2399,90 @@ function _startTransition() {
   state.transBlend     = 0;
 }
 
+// Resolve transition duration and easing for a given from→to pair
+function _resolveTransition(fromKey, toName) {
+  const beh     = behaviors[toName] || behaviors.idle;
+  const pairDur = transTable[`${fromKey}→${toName}`];
+  const dur     = pairDur != null ? pairDur
+                : beh.enterDur   != null ? beh.enterDur
+                : params.transitionDur;
+  const eFn = ease[beh.enterEase] || ease.inOutCubic;
+  return { dur, eFn };
+}
+
 function setAttn(name) {
   if (!behaviors[name] || state.attn === name) return;
+  const { dur, eFn } = _resolveTransition(state.attn, name);
+  const beh = behaviors[name];
+
+  // maxHold: save current attn for auto-return (don't overwrite if already in hold)
+  if (beh.maxHold != null && state.holdReturnAttn === null) {
+    state.holdReturnAttn = state.attn;
+  }
+  if (beh.maxHold != null) {
+    state.holdTimer = Math.max(state.holdTimer, beh.maxHold);
+  }
+
   _startTransition();
+  state.transDur    = dur;
+  state.transEaseFn = eFn;
   state.attn          = name;
   state.behaviorTimer = -0.3;
+
   document.querySelectorAll('.attn-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('attn-' + name)?.classList.add('active');
   _compUpdateStatus();
-  logEvent(`gaze → ${name}`);
+  logEvent(`gaze → ${name}` + (dur < 0.05 ? ' ⚡' : ` (${dur.toFixed(2)}s)`));
 }
 
 function setAffect(name) {
   if (!behaviors[name] || state.affect === name) return;
+  const { dur, eFn } = _resolveTransition(state.affect, name);
+  const beh = behaviors[name];
+
+  if (beh.maxHold != null && state.holdReturnAffect === null) {
+    state.holdReturnAffect = state.affect;
+  }
+  if (beh.maxHold != null) {
+    state.holdTimer = Math.max(state.holdTimer, beh.maxHold);
+  }
+
   _startTransition();
+  state.transDur    = dur;
+  state.transEaseFn = eFn;
   state.affect = name;
+
   document.querySelectorAll('.affect-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('affect-' + name)?.classList.add('active');
   _compUpdateStatus();
-  logEvent(`expr → ${name}`);
+  logEvent(`expr → ${name}` + (dur < 0.05 ? ' ⚡' : ` (${dur.toFixed(2)}s)`));
 }
 
 // Legacy / linked mode — sets both layers simultaneously
 function setBehavior(name) {
   if (!behaviors[name]) return;
+  // Use the attention layer to resolve transition (both layers change together)
+  const { dur, eFn } = _resolveTransition(state.attn, name);
+  const beh = behaviors[name];
+
+  if (beh.maxHold != null) {
+    if (state.holdReturnAttn   === null) state.holdReturnAttn   = state.attn;
+    if (state.holdReturnAffect === null) state.holdReturnAffect = state.affect;
+    state.holdTimer = Math.max(state.holdTimer, beh.maxHold);
+  }
+
   _startTransition();
+  state.transDur    = dur;
+  state.transEaseFn = eFn;
   state.attn   = name;
   state.affect = name;
   state.behaviorTimer = -0.3;
+
   document.querySelectorAll('.attn-btn, .affect-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('attn-'   + name)?.classList.add('active');
   document.getElementById('affect-' + name)?.classList.add('active');
   _compUpdateStatus();
-  logEvent(`behavior → ${name}`);
+  logEvent(`behavior → ${name}` + (dur < 0.05 ? ' ⚡' : ` (${dur.toFixed(2)}s)`));
 }
 
 function switchCompTab(tab) {

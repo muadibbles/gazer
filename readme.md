@@ -155,9 +155,9 @@ The behavior controller is designed for expansion — each behavior is just a co
 - [x] Conversational states — listening, processing, speaking, waiting
 - [x] Affective states — engaged, confused, pleased, uncomfortable
 - [x] Operational states — waking, resting, interrupted
-- [ ] State compositor — combine attention + affective layers; attention governs gaze/saccade, affect governs expression (brow, lid, mouth); blend ratio slider
+- [x] State compositor — combine attention + affective layers; attention governs gaze/saccade, affect governs expression (brow, lid, mouth); blend ratio slider
+- [x] State machine — per-state blend duration + easing (`interrupted` = instant snap, `resting` = 1.5s melt); pair-specific overrides (e.g. `pleased→uncomfortable` = 0.9s reluctant shift); `maxHold` auto-return (interrupted snaps back after 0.5s); live progress bar in compositor UI
 - [ ] Micro-expressions — brief flashes of affect (200ms) that don't fully commit, then return to base state
-- [ ] State machine — legal transition graph, blend durations between states (fast snap for `interrupted`, slow melt for `pleased → uncomfortable`)
 
 ### Emotion Engine
 - [ ] Pressure/scoring system — each state has a "pressure" that builds over time or from stimulus; highest pressure wins; novelty decay makes gazer restless
