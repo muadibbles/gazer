@@ -744,6 +744,9 @@ const colors = {
   mouthColor: '#ffffff',
   trailColor: '#ff4444',
   stiColor:   '#4af7c4',
+  floorColor:  '#18181f',
+  robotColor:  '#e2e2e0',
+  wheelColor:  '#202028',
 };
 
 function hexToRgba(hex, alpha) {
@@ -1753,6 +1756,9 @@ function buildColorPanel() {
     ['browColor',  'Brow',      null],
     ['lidColor',   'Lid',       null],
     ['glowColor',  'Glow',      null],
+    ['floorColor', 'Floor',     () => window.three?.applyColors()],
+    ['robotColor', 'Robot body',() => window.three?.applyColors()],
+    ['wheelColor', 'Wheels',    () => window.three?.applyColors()],
   ].forEach(([key, label, onChange]) => panel.appendChild(makeColorRow(key, label, onChange)));
   stage.style.background = colors.stageBg;
 }
@@ -2301,7 +2307,8 @@ function update() {
     headGroup.rotation.x =  s.head3DPitch * Math.PI / 180;
     robot.rotation.y     =  s.body3DYaw   * Math.PI / 180;
 
-    // Sync background to stageBg color
+    // Sync colors each frame (catches config loads)
+    applyColors();
     const bg = window.colors?.stageBg ?? '#0a0a0f';
     renderer.setClearColor(new THREE.Color(bg));
   }
@@ -2310,7 +2317,15 @@ function update() {
   renderer.render(scene, camera);
 }
 
-window.three = { update, resize };
+function applyColors() {
+  const c = window.colors;
+  if (!c) return;
+  floorMat.color.set(c.floorColor);
+  robotMat.color.set(c.robotColor);
+  wheelMat.color.set(c.wheelColor);
+}
+
+window.three = { update, resize, applyColors };
 </script>
 
 </body>
