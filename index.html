@@ -644,6 +644,8 @@ const params = {
   pauseMin:        1.50,
   pauseMax:        3.50,
   microSaccade:    0.02,
+  faceTranslateAmt:   0,   // px the whole face drifts toward gaze (0 = off)
+  faceTranslateSpeed: 1.5, // lerp rate (higher = snappier follow)
 
   // ── Anticipation (saccade) ──
   anticipationAmt: 0,     // 0 = off; 0.1–0.4 = wind-up distance (ratio of saccade dist)
@@ -775,6 +777,10 @@ const state = {
 
   // Blink reaction (smoothed blink.t for facial reactions)
   blinkReact: 0,
+
+  // Global face translation (drifts toward gaze target)
+  faceX: 0,
+  faceY: 0,
 };
 
 let lastTime = null;
@@ -1103,6 +1109,18 @@ function update(dt) {
       state.gazeX = Math.max(-0.95, Math.min(0.95, state.gazeX));
       state.gazeY = Math.max(-0.95, Math.min(0.95, state.gazeY));
     }
+  }
+
+  // Global face translation — whole face drifts toward gaze target
+  if (params.faceTranslateAmt > 0) {
+    const targetFX = state.gazeX * params.faceTranslateAmt;
+    const targetFY = state.gazeY * params.faceTranslateAmt;
+    const t = Math.min(1, params.faceTranslateSpeed * dt);
+    state.faceX += (targetFX - state.faceX) * t;
+    state.faceY += (targetFY - state.faceY) * t;
+  } else {
+    state.faceX = 0;
+    state.faceY = 0;
   }
 
   updateBlink(dt);
@@ -1518,10 +1536,16 @@ function draw() {
   ctx.fillStyle = colors.canvasBg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  // ── Global face translation (parent transform) ──
+  ctx.save();
+  ctx.translate(state.faceX, state.faceY);
+
   getEyes().forEach(eye => { drawEye(eye); if (params.showLids) drawLids(eye); if (params.showBrows) drawBrow(eye); });
   getEyes().forEach(eye => { drawTrail(eye); drawSTI(eye); });
   drawNose();
   if (params.showMouth) drawMouth();
+
+  ctx.restore();
 
   if (params.showGrid) drawGrid();
 
@@ -1811,14 +1835,16 @@ function buildControlPanels() {
       ['doubleBlink',      'Double blink', 0,    1.0, 0.01, 2],
     ],
     'panel-gaze': [
-      ['arcCurvature',  'Arc curve',   0,    1,   0.01, 2],
-      ['gazeSpeed',     'Speed',       0.1,  3,   0.01, 2],
-      ['saccadeJitter', 'Jitter',      0,    1,   0.01, 2],
-      ['gazeRangeX',    'Range X',     0.05, 3,   0.01, 2],
-      ['gazeRangeY',    'Range Y',     0.05, 2,   0.01, 2],
-      ['pauseMin',      'Pause min',   0.1,  10,  0.1,  1],
-      ['pauseMax',      'Pause max',   0.1,  20,  0.1,  1],
-      ['microSaccade',  'Micro-drift', 0,    1,   0.01, 2],
+      ['arcCurvature',      'Arc curve',          0,    1,   0.01, 2],
+      ['gazeSpeed',         'Speed',              0.1,  3,   0.01, 2],
+      ['saccadeJitter',     'Jitter',             0,    1,   0.01, 2],
+      ['gazeRangeX',        'Range X',            0.05, 3,   0.01, 2],
+      ['gazeRangeY',        'Range Y',            0.05, 2,   0.01, 2],
+      ['pauseMin',          'Pause min',          0.1,  10,  0.1,  1],
+      ['pauseMax',          'Pause max',          0.1,  20,  0.1,  1],
+      ['microSaccade',      'Micro-drift',        0,    1,   0.01, 2],
+      ['faceTranslateAmt',  'Face shift amount',  0,    50,  1,    0],
+      ['faceTranslateSpeed','Face shift speed',   0.2,  8,   0.1,  1],
     ],
     'panel-anim': [
       ['anticipationAmt', 'Saccade anticipation', 0,    0.5,  0.01, 2],

@@ -99,7 +99,7 @@ The behavior controller is designed for expansion — each behavior is just a co
 - [ ] Environmental context awareness — context tags (e.g. "Meeting", "Reading") influence behavior parameters
 
 ### Animation Hierarchy
-- [ ] Global face translation — subtle whole-face shift toward the current gaze target, parent transform above gaze direction so the entire rig moves together
+- [x] Global face translation — subtle whole-face shift toward the current gaze target, parent transform above gaze direction so the entire rig moves together
 
 ### 3D & Platform
 - [ ] 3D body — three.js scene using the face as the character's face
