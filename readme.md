@@ -124,6 +124,7 @@ See [docs/animation-principles.md](docs/animation-principles.md) for the full st
 - [x] Planning grid overlay — center crosshair, grid, and no-go border zone for layout reference
 - [x] Anticipation & follow-through — brief wind-up before saccade fires, slight overshoot/settle on landing
 - [ ] Bezier arc preview — ghost the full arc path before a saccade executes
+- [ ] Spring force vectors — arrows on head/body showing current spring acceleration
 - [ ] Velocity heatmap — overlay showing dwell density (where the eye spends the most time)
 - [ ] Behavior transition flash — subtle color pulse when behavior switches
 - [ ] Blink countdown indicator — visual cue showing time until next blink (dev tool)
@@ -162,23 +163,34 @@ See [docs/drive-system.md](docs/drive-system.md) for the full design.
 - [ ] Principles off switch — single checkbox that zeros all animation principle parameters (squash/stretch, anticipation, follow-through, arc curvature, easing, cascade delays) to show the mechanical baseline; useful for demonstrating what the principles actually contribute
 
 ### API & Integration
-- [x] WebSocket API — relay server + browser client; external processes send `behavior`, `attn`, `affect`, `param`, `look`, `blink`, `color` commands
-- [ ] Raspberry Pi output layer (OLED / servo)
-- [ ] Local LLM integration — inference state drives behavior controller
+- [x] WebSocket API — relay server + browser client; external processes send `behavior`, `attn`, `affect`, `param`, `look`, `blink`, `color`, `event`, `pressure`, `micro` commands
 - [x] Object tracking — draggable ball in 3D scene; robot tracks with 75/25 head/eye split; configurable timeout reverts to idle wander
-- [ ] Face tracking — gaze tracks detected faces, overriding random wandering
-- [ ] Head pose integration — pitch/yaw/roll inputs make gaze relative to head orientation
 - [ ] Gaze vector export — time-stamped gaze vectors exported as CSV/JSON for external analysis
-
-### 3D & Platform
-- [x] 3D body — Three.js robot scene; face canvas mapped as texture; head-leads-body cascade with spring physics; hub caps, color controls
 - [ ] Gaze-based UI interaction — dwell-time selection for UI elements
 
------
+### Robot Deployment
 
-## Robot deployment
+See [docs/robot-architecture.md](docs/robot-architecture.md) for the full design: state broadcast architecture, telemetry sim view, recorder/playback, hardware adapters, and input pipeline.
 
-See [docs/robot-architecture.md](docs/robot-architecture.md) for the design plan: behavior engine extraction, state broadcast, telemetry sim view, recording/playback, hardware output adapters, and input pipeline.
+**Engine & architecture**
+- [ ] Engine extraction — split `index.html` into `engine.js` + renderer modules; prerequisite for all deployment work
+- [ ] State broadcast — engine publishes full state packet to WebSocket each tick; all subscribers receive identical stream
+- [ ] Browser telemetry mode — browser receives state rather than computing it; cannot drift from robot reality
+
+**Observability**
+- [ ] Recorder — WebSocket subscriber writes JSONL state log; no logic, just timestamps and packets
+- [ ] Playback — feed recorded JSONL back into browser renderer; scrub-able, speed-adjustable
+
+**Hardware output**
+- [ ] OLED adapter — re-implement `EyeRenderer` as 1-bit pixel buffer writer for SSD1306/SH1106 via i2c
+- [ ] Servo adapter — map `gazeX/Y`, `lidOpenness`, `head3DYaw/Pitch` to servo positions via pigpio or serial
+- [ ] Raspberry Pi deployment — Pi 4/Jetson full stack (Node.js engine + Chromium kiosk); Pi Zero headless
+
+**Input pipeline**
+- [ ] Audio pipeline — mic amplitude → blink rate/processing affect; wake word → alert+listening; silence → waiting
+- [ ] Face tracking — camera → face position events → drive system (`face_detected`, `face_lost`)
+- [ ] Head pose integration — external pitch/yaw/roll inputs offset gaze target
+- [ ] LLM integration — inference state → drive events (`speech_start`, `speech_end`, `uncertain`)
 
 -----
 
