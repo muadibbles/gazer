@@ -213,6 +213,54 @@ input[type="range"]::-webkit-slider-thumb {
   margin: 8px 0 4px;
 }
 
+/* ── Compositor ── */
+.comp-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.comp-tab {
+  flex: 1;
+  padding: 6px 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text);
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.15s;
+}
+.comp-tab.active { background: var(--iris-dim); color: var(--iris); border-color: var(--iris-dim); font-weight: 700; }
+#comp-tab-expr.active { background: rgba(255,107,107,0.18); color: var(--accent); border-color: rgba(255,107,107,0.4); }
+.comp-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 2px 0 10px;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+.comp-status-g { color: var(--iris); }
+.comp-status-e { color: var(--accent); }
+.comp-trans-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.comp-trans-row label { font-size: 10px; color: var(--text); white-space: nowrap; }
+/* Affect (expression) layer active button — accent color */
+.affect-btn.active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 700;
+}
+
 button {
   background: transparent;
   border: 1px solid var(--border);
@@ -502,43 +550,105 @@ input[type="checkbox"].grid-cb:checked::after {
 
 <div class="panel">
 
-  <div class="accordion" id="acc-behavior">
+  <div class="accordion open" id="acc-behavior">
     <button class="acc-header" onclick="toggleAcc('acc-behavior')">
-      Behavior <span class="chevron">▾</span>
+      Compositor <span class="chevron">▾</span>
     </button>
     <div class="acc-body"><div class="acc-inner">
-      <div class="behavior-group-label">CLASSIC</div>
-      <div class="behavior-buttons">
-        <button id="btn-idle"      class="active" onclick="setBehavior('idle')">Idle</button>
-        <button id="btn-attentive" onclick="setBehavior('attentive')">Attentive</button>
-        <button id="btn-curious"   onclick="setBehavior('curious')">Curious</button>
-        <button id="btn-sleepy"    onclick="setBehavior('sleepy')">Sleepy</button>
+
+      <!-- Tab switcher -->
+      <div class="comp-tabs">
+        <button id="comp-tab-gaze" class="comp-tab active" onclick="switchCompTab('gaze')">GAZE</button>
+        <button id="comp-tab-expr" class="comp-tab"        onclick="switchCompTab('expr')">EXPRESSION</button>
       </div>
-      <div class="behavior-group-label">ATTENTION</div>
-      <div class="behavior-buttons">
-        <button id="btn-alert"     onclick="setBehavior('alert')">Alert</button>
-        <button id="btn-searching" onclick="setBehavior('searching')">Searching</button>
+
+      <!-- Current combination status -->
+      <div class="comp-status">
+        <span class="comp-status-g">G: <span id="comp-status-g-val">IDLE</span></span>
+        <span style="color:var(--border)">+</span>
+        <span class="comp-status-e">E: <span id="comp-status-e-val">IDLE</span></span>
       </div>
-      <div class="behavior-group-label">CONVERSATIONAL</div>
-      <div class="behavior-buttons">
-        <button id="btn-listening"   onclick="setBehavior('listening')">Listening</button>
-        <button id="btn-processing"  onclick="setBehavior('processing')">Processing</button>
-        <button id="btn-speaking"    onclick="setBehavior('speaking')">Speaking</button>
-        <button id="btn-waiting"     onclick="setBehavior('waiting')">Waiting</button>
+
+      <!-- Transition speed -->
+      <div class="comp-trans-row">
+        <label>Transition</label>
+        <input type="range" min="0" max="2" step="0.05" value="0.3" style="flex:1"
+          oninput="params.transitionDur=+this.value; document.getElementById('comp-trans-val').textContent=this.value+'s'"/>
+        <span id="comp-trans-val" style="color:var(--muted);font-size:11px;min-width:28px;">0.3s</span>
       </div>
-      <div class="behavior-group-label">AFFECTIVE</div>
-      <div class="behavior-buttons">
-        <button id="btn-engaged"       onclick="setBehavior('engaged')">Engaged</button>
-        <button id="btn-confused"      onclick="setBehavior('confused')">Confused</button>
-        <button id="btn-pleased"       onclick="setBehavior('pleased')">Pleased</button>
-        <button id="btn-uncomfortable" onclick="setBehavior('uncomfortable')">Uncomfortable</button>
+
+      <!-- GAZE panel -->
+      <div id="comp-panel-gaze" class="comp-panel">
+        <div class="behavior-group-label">CLASSIC</div>
+        <div class="behavior-buttons">
+          <button id="attn-idle"       class="attn-btn active" onclick="setAttn('idle')">Idle</button>
+          <button id="attn-attentive"  class="attn-btn"        onclick="setAttn('attentive')">Attentive</button>
+          <button id="attn-curious"    class="attn-btn"        onclick="setAttn('curious')">Curious</button>
+          <button id="attn-sleepy"     class="attn-btn"        onclick="setAttn('sleepy')">Sleepy</button>
+        </div>
+        <div class="behavior-group-label">ATTENTION</div>
+        <div class="behavior-buttons">
+          <button id="attn-alert"      class="attn-btn" onclick="setAttn('alert')">Alert</button>
+          <button id="attn-searching"  class="attn-btn" onclick="setAttn('searching')">Searching</button>
+        </div>
+        <div class="behavior-group-label">CONVERSATIONAL</div>
+        <div class="behavior-buttons">
+          <button id="attn-listening"  class="attn-btn" onclick="setAttn('listening')">Listening</button>
+          <button id="attn-processing" class="attn-btn" onclick="setAttn('processing')">Processing</button>
+          <button id="attn-speaking"   class="attn-btn" onclick="setAttn('speaking')">Speaking</button>
+          <button id="attn-waiting"    class="attn-btn" onclick="setAttn('waiting')">Waiting</button>
+        </div>
+        <div class="behavior-group-label">AFFECTIVE</div>
+        <div class="behavior-buttons">
+          <button id="attn-engaged"       class="attn-btn" onclick="setAttn('engaged')">Engaged</button>
+          <button id="attn-confused"      class="attn-btn" onclick="setAttn('confused')">Confused</button>
+          <button id="attn-pleased"       class="attn-btn" onclick="setAttn('pleased')">Pleased</button>
+          <button id="attn-uncomfortable" class="attn-btn" onclick="setAttn('uncomfortable')">Uncomfort.</button>
+        </div>
+        <div class="behavior-group-label">OPERATIONAL</div>
+        <div class="behavior-buttons">
+          <button id="attn-waking"      class="attn-btn" onclick="setAttn('waking')">Waking</button>
+          <button id="attn-resting"     class="attn-btn" onclick="setAttn('resting')">Resting</button>
+          <button id="attn-interrupted" class="attn-btn" onclick="setAttn('interrupted')">Interrupted</button>
+        </div>
       </div>
-      <div class="behavior-group-label">OPERATIONAL</div>
-      <div class="behavior-buttons">
-        <button id="btn-waking"      onclick="setBehavior('waking')">Waking</button>
-        <button id="btn-resting"     onclick="setBehavior('resting')">Resting</button>
-        <button id="btn-interrupted" onclick="setBehavior('interrupted')">Interrupted</button>
+
+      <!-- EXPRESSION panel -->
+      <div id="comp-panel-expr" class="comp-panel" style="display:none">
+        <div class="behavior-group-label">CLASSIC</div>
+        <div class="behavior-buttons">
+          <button id="affect-idle"       class="affect-btn active" onclick="setAffect('idle')">Idle</button>
+          <button id="affect-attentive"  class="affect-btn"        onclick="setAffect('attentive')">Attentive</button>
+          <button id="affect-curious"    class="affect-btn"        onclick="setAffect('curious')">Curious</button>
+          <button id="affect-sleepy"     class="affect-btn"        onclick="setAffect('sleepy')">Sleepy</button>
+        </div>
+        <div class="behavior-group-label">ATTENTION</div>
+        <div class="behavior-buttons">
+          <button id="affect-alert"      class="affect-btn" onclick="setAffect('alert')">Alert</button>
+          <button id="affect-searching"  class="affect-btn" onclick="setAffect('searching')">Searching</button>
+        </div>
+        <div class="behavior-group-label">CONVERSATIONAL</div>
+        <div class="behavior-buttons">
+          <button id="affect-listening"  class="affect-btn" onclick="setAffect('listening')">Listening</button>
+          <button id="affect-processing" class="affect-btn" onclick="setAffect('processing')">Processing</button>
+          <button id="affect-speaking"   class="affect-btn" onclick="setAffect('speaking')">Speaking</button>
+          <button id="affect-waiting"    class="affect-btn" onclick="setAffect('waiting')">Waiting</button>
+        </div>
+        <div class="behavior-group-label">AFFECTIVE</div>
+        <div class="behavior-buttons">
+          <button id="affect-engaged"       class="affect-btn" onclick="setAffect('engaged')">Engaged</button>
+          <button id="affect-confused"      class="affect-btn" onclick="setAffect('confused')">Confused</button>
+          <button id="affect-pleased"       class="affect-btn" onclick="setAffect('pleased')">Pleased</button>
+          <button id="affect-uncomfortable" class="affect-btn" onclick="setAffect('uncomfortable')">Uncomfort.</button>
+        </div>
+        <div class="behavior-group-label">OPERATIONAL</div>
+        <div class="behavior-buttons">
+          <button id="affect-waking"      class="affect-btn" onclick="setAffect('waking')">Waking</button>
+          <button id="affect-resting"     class="affect-btn" onclick="setAffect('resting')">Resting</button>
+          <button id="affect-interrupted" class="affect-btn" onclick="setAffect('interrupted')">Interrupted</button>
+        </div>
       </div>
+
     </div></div>
   </div>
 
@@ -758,6 +868,7 @@ const params = {
   bodyRotationMax:    10,  // degrees — max 3D body yaw
   body3DSpeed:        0.02, // spring stiffness scale for 3D body yaw
   ballTrackTimeout:   3,   // seconds before reverting to idle wander after drag ends
+  transitionDur:      0.3, // seconds to blend between compositor states
   headSpringDamp:     14,  // head rotation spring damping (higher = less overshoot)
   bodySpringDamp:     12,  // body rotation spring damping
   headArcFactor:      0.12, // head tilt per (deg/s) yaw velocity — arc in turns
@@ -889,8 +1000,12 @@ const state = {
     ftVel: 0,      // spring velocity for follow-through
   },
 
-  // Behavior
-  behavior: 'idle',
+  // Compositor — attention layer (gaze/saccade) + affect layer (expression)
+  attn:          'idle',   // gaze/saccade behavior key
+  affect:        'idle',   // expression behavior key
+  transBlend:    1.0,      // 0 = fully old state, 1 = fully new state
+  transOldAttn:  'idle',   // previous attention key (for blending)
+  transOldAffect:'idle',   // previous affect key (for blending)
   behaviorTimer: 0,
 
   // Arc trail
@@ -1209,7 +1324,52 @@ const behaviors = {
   },
 };
 
-function getBehavior() { return behaviors[state.behavior]; }
+// ─────────────────────────────────────────────
+//  COMPOSITOR
+//  Merges attention layer (gaze) + affect layer (expression) into a
+//  single behavior object. Transitions blend smoothly between states.
+// ─────────────────────────────────────────────
+
+function getCompositor() {
+  const att    = behaviors[state.attn]          || behaviors.idle;
+  const aff    = behaviors[state.affect]         || behaviors.idle;
+  const oldAtt = behaviors[state.transOldAttn]   || att;
+  const oldAff = behaviors[state.transOldAffect] || aff;
+  const t      = state.transBlend;
+
+  // Blend a pair of plain numbers
+  const ln = (a, b) => a + (b - a) * t;
+  // Blend a pair of fields that may be functions or numbers
+  const lf = (a, b) => {
+    const av = typeof a === 'function' ? a() : a;
+    const bv = typeof b === 'function' ? b() : b;
+    return av + (bv - av) * t;
+  };
+
+  return {
+    // Attention layer — gaze / saccade
+    gazeRadius: ln(oldAtt.gazeRadius, att.gazeRadius),
+    pauseMin:   ln(oldAtt.pauseMin,   att.pauseMin),
+    pauseMax:   ln(oldAtt.pauseMax,   att.pauseMax),
+    speedMult:  ln(oldAtt.speedMult,  att.speedMult),
+    easeFn:     t < 0.5 ? oldAtt.easeFn : att.easeFn,
+    // Affect layer — expression
+    blinkMult:  ln(oldAff.blinkMult,  aff.blinkMult),
+    lidOpenness: () => lf(oldAff.lidOpenness, aff.lidOpenness),
+    upperLid:    () => lf(oldAff.upperLid,    aff.upperLid),
+    lowerLid:    () => lf(oldAff.lowerLid,    aff.lowerLid),
+    browRaise:   () => lf(oldAff.browRaise,   aff.browRaise),
+    browTilt:    () => lf(oldAff.browTilt,     aff.browTilt),
+    browArch:    () => lf(oldAff.browArch,     aff.browArch),
+    mouthCurve:  () => lf(oldAff.mouthCurve,  aff.mouthCurve),
+    // Label shows the combination
+    label: state.attn === state.affect
+      ? (att.label || state.attn.toUpperCase())
+      : (att.label || state.attn.toUpperCase()) + '+' + (aff.label || state.affect.toUpperCase()),
+  };
+}
+
+function getBehavior() { return getCompositor(); }
 
 // ─────────────────────────────────────────────
 //  GAZE SACCADE — arc-based eye movement
@@ -1505,6 +1665,11 @@ function update(dt) {
         state.squashAmt = 0; state.squashVel = 0;
       }
     }
+  }
+
+  // Compositor transition blend — advances 0→1 at rate = 1/transitionDur
+  if (state.transBlend < 1) {
+    state.transBlend = Math.min(1, state.transBlend + dt / Math.max(0.01, params.transitionDur));
   }
 
   updateBlink(dt);
@@ -2137,12 +2302,59 @@ function applyLoadedConfig() {
 //  UI HELPERS
 // ─────────────────────────────────────────────
 
-function setBehavior(name) {
-  state.behavior = name;
+function _compUpdateStatus() {
+  const g = document.getElementById('comp-status-g-val');
+  const e = document.getElementById('comp-status-e-val');
+  if (g) g.textContent = state.attn.toUpperCase();
+  if (e) e.textContent = state.affect.toUpperCase();
+}
+
+function _startTransition() {
+  state.transOldAttn   = state.attn;
+  state.transOldAffect = state.affect;
+  state.transBlend     = 0;
+}
+
+function setAttn(name) {
+  if (!behaviors[name] || state.attn === name) return;
+  _startTransition();
+  state.attn          = name;
   state.behaviorTimer = -0.3;
-  document.querySelectorAll('.behavior-buttons button').forEach(b => b.classList.remove('active'));
-  document.getElementById('btn-' + name).classList.add('active');
+  document.querySelectorAll('.attn-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('attn-' + name)?.classList.add('active');
+  _compUpdateStatus();
+  logEvent(`gaze → ${name}`);
+}
+
+function setAffect(name) {
+  if (!behaviors[name] || state.affect === name) return;
+  _startTransition();
+  state.affect = name;
+  document.querySelectorAll('.affect-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('affect-' + name)?.classList.add('active');
+  _compUpdateStatus();
+  logEvent(`expr → ${name}`);
+}
+
+// Legacy / linked mode — sets both layers simultaneously
+function setBehavior(name) {
+  if (!behaviors[name]) return;
+  _startTransition();
+  state.attn   = name;
+  state.affect = name;
+  state.behaviorTimer = -0.3;
+  document.querySelectorAll('.attn-btn, .affect-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('attn-'   + name)?.classList.add('active');
+  document.getElementById('affect-' + name)?.classList.add('active');
+  _compUpdateStatus();
   logEvent(`behavior → ${name}`);
+}
+
+function switchCompTab(tab) {
+  document.getElementById('comp-panel-gaze').style.display = tab === 'gaze' ? '' : 'none';
+  document.getElementById('comp-panel-expr').style.display = tab === 'expr' ? '' : 'none';
+  document.getElementById('comp-tab-gaze').classList.toggle('active', tab === 'gaze');
+  document.getElementById('comp-tab-expr').classList.toggle('active', tab === 'expr');
 }
 
 function refreshSlider(el) {
@@ -2376,7 +2588,7 @@ window.state  = state;
 window.params = params;
 window.colors = colors;
 logEvent('system ready');
-logEvent('behavior → idle');
+logEvent('gaze → idle  |  expr → idle');
 
 // ─────────────────────────────────────────────
 //  WEBSOCKET API
@@ -2434,6 +2646,14 @@ function wsHandleMessage(msg) {
 
     case 'behavior':
       if (behaviors[msg.value]) setBehavior(msg.value);
+      break;
+
+    case 'attn':
+      if (behaviors[msg.value]) setAttn(msg.value);
+      break;
+
+    case 'affect':
+      if (behaviors[msg.value]) setAffect(msg.value);
       break;
 
     case 'param':
