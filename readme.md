@@ -72,6 +72,31 @@ All exposed in the UI panel:
 
 ## Architecture
 
+-----
+
+## 12 Principles of Animation
+
+From Johnston & Thomas, *The Illusion of Life* (Disney, 1981). Gazer uses these as a design checklist.
+
+| # | Principle | Description | Status |
+|---|-----------|-------------|--------|
+| 1 | **Squash & stretch** | Deformation conveys weight and flexibility | ✅ eye deforms during saccades |
+| 2 | **Anticipation** | Wind-up before action signals what's coming | ✅ brief counter-move before saccade fires |
+| 3 | **Staging** | Clear composition, one idea at a time | n/a — single subject |
+| 4 | **Straight ahead vs pose-to-pose** | Two approaches to planning movement | n/a |
+| 5 | **Follow-through & overlapping action** | Parts settle independently after movement stops | ✅ overshoot spring; head/body cascade settle at different rates |
+| 6 | **Slow in and slow out** | Ease in/out — most motion happens in the middle | ✅ easing library: `inOutCubic`, `outBack`, `outQuart`, `inOutQuint` |
+| 7 | **Arcs** | Natural motion follows curved paths, not straight lines | ✅ quadratic bezier saccades |
+| 8 | **Secondary action** | Supporting motions that reinforce the primary one | ✅ face/head/body cascade; brow and mouth react to blink |
+| 9 | **Timing** | Number of frames determines weight and mood | ✅ per-behavior speed, pause, and blink timing |
+| 10 | **Exaggeration** | Push beyond realism to read as more real | 🔨 behavior states push values — room to go further |
+| 11 | **Solid drawing** | Volume, weight, balance (the 3D-thinking principle) | ✅ three.js robot body with physical presence |
+| 12 | **Appeal** | Charisma — the thing that makes you want to watch | the whole project |
+
+Areas with room to grow: **exaggeration** (states could push harder at extremes) and **overlap** (lids, brows, mouth each settling at different rates after a behavior change).
+
+-----
+
 ```
 BehaviorController
 ├── behaviors/
