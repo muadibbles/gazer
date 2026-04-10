@@ -1680,8 +1680,8 @@ function draw() {
     }
     drawEye(eye);
     if (params.showLids)  drawLids(eye);
-    if (params.showBrows) drawBrow(eye);
     if (hasDeform) ctx.restore();
+    if (params.showBrows) drawBrow(eye);
   });
   getEyes().forEach(eye => { drawTrail(eye); drawSTI(eye); });
   drawNose();
