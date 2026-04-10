@@ -3527,7 +3527,7 @@ function setAxisLock(axis, locked) {
   if (axis === 'z') lockZ = locked;
 }
 
-function setBallY(y) { ball.position.y = Math.max(0.05, Math.min(6, y)); }
+function setBallY(y) { ball.position.y = Math.max(0.05, Math.min(6, y)); timeSinceDrag = 0; }
 
 function startDrag(clientX, clientY) {
   getMouseNDC(clientX, clientY);
