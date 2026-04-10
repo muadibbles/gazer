@@ -5,6 +5,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GAZER</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+    }
+  }
+  </script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
 
@@ -353,6 +361,35 @@ textarea.json-area {
 }
 .ws-url-input:focus { border-color: var(--iris); }
 
+/* 3D view toggle */
+.view-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.view-toggle-row label {
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* 3D stage */
+.stage { position: relative; }
+#three-stage {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+.stage.mode-3d #three-stage { display: block; }
+/* keep canvas rendering (texture source) but hide it visually */
+.stage.mode-3d > #canvas { opacity: 0; pointer-events: none; }
+
 /* Grid toggle */
 .grid-toggle-row {
   display: flex;
@@ -407,6 +444,10 @@ input[type="checkbox"].grid-cb:checked::after {
 </header>
 
 <div class="left-panel">
+  <div class="view-toggle-row">
+    <input type="checkbox" class="grid-cb" id="toggle-3d" onchange="toggle3D(this.checked)" />
+    <label for="toggle-3d">3D View</label>
+  </div>
   <div class="accordion" id="acc-ws">
     <button class="acc-header" onclick="toggleAcc('acc-ws')">
       WebSocket API <span class="chevron">▾</span>
@@ -431,6 +472,7 @@ input[type="checkbox"].grid-cb:checked::after {
 
 <div class="stage">
   <canvas id="canvas" width="600" height="600"></canvas>
+  <div id="three-stage"></div>
 </div>
 
 <div class="panel">
@@ -656,10 +698,12 @@ const params = {
   // ── Motion Cascade (pupils → face → head → body) ──
   faceTranslateAmt:   0,   // px face shifts toward gaze target
   faceTranslateSpeed: 1.5, // lerp speed (fast follower)
-  headTurnAmt:        0,   // px head shifts (slower, larger range)
+  headTurnAmt:        0,   // px head shifts in 2D (slower, larger range)
   headTurnSpeed:      0.6, // lerp speed
-  bodyShiftAmt:       0,   // px body shifts (slowest)
+  headRotationMax:    25,  // degrees — max 3D head yaw
+  bodyShiftAmt:       0,   // px body shifts in 2D (slowest)
   bodyShiftSpeed:     0.3, // lerp speed
+  bodyRotationMax:    10,  // degrees — max 3D body yaw
 
   // ── Anticipation (saccade) ──
   anticipationAmt: 0,     // 0 = off; 0.1–0.4 = wind-up distance (ratio of saccade dist)
@@ -796,6 +840,11 @@ const state = {
   faceX: 0, faceY: 0,
   headX: 0, headY: 0,
   bodyX: 0, bodyY: 0,
+
+  // 3D rotation state (drives Three.js head/body)
+  head3DYaw:   0,   // degrees, positive = right
+  head3DPitch: 0,   // degrees, positive = down
+  body3DYaw:   0,   // degrees, positive = right
 };
 
 let lastTime = null;
@@ -1135,6 +1184,11 @@ function update(dt) {
   state.headY = lerp(state.headY, state.gazeY * params.headTurnAmt,      params.headTurnSpeed);
   state.bodyX = lerp(state.bodyX, state.gazeX * params.bodyShiftAmt,     params.bodyShiftSpeed);
   state.bodyY = lerp(state.bodyY, state.gazeY * params.bodyShiftAmt,     params.bodyShiftSpeed);
+
+  // 3D rotation (drives Three.js scene via window.three)
+  state.head3DYaw   = lerp(state.head3DYaw,   state.gazeX *  params.headRotationMax,        params.headTurnSpeed);
+  state.head3DPitch = lerp(state.head3DPitch,  state.gazeY *  params.headRotationMax * 0.35, params.headTurnSpeed);
+  state.body3DYaw   = lerp(state.body3DYaw,    state.gazeX *  params.bodyRotationMax,        params.bodyShiftSpeed);
 
   updateBlink(dt);
 
@@ -1624,6 +1678,7 @@ function loop(ts) {
 
   update(dt);
   draw();
+  if (window.three) window.three.update();
   requestAnimationFrame(loop);
 }
 
@@ -1652,6 +1707,11 @@ function loadConfig() {
 
 function toggleAcc(id) {
   document.getElementById(id).classList.toggle('open');
+}
+
+function toggle3D(on) {
+  document.querySelector('.stage').classList.toggle('mode-3d', on);
+  if (on && window.three) window.three.resize();
 }
 
 function makeColorRow(key, label, onChange) {
@@ -1886,10 +1946,12 @@ function buildControlPanels() {
     'panel-motion': [
       ['faceTranslateAmt',  'Face shift',    0,   50,  1,    0],
       ['faceTranslateSpeed','↳ Speed',       0.2,  8,  0.1,  1, true],
-      ['headTurnAmt',       'Head turn',     0,   80,  1,    0],
-      ['headTurnSpeed',     '↳ Speed',       0.1,  4,  0.1,  1, true],
-      ['bodyShiftAmt',      'Body shift',    0,  100,  1,    0],
-      ['bodyShiftSpeed',    '↳ Speed',       0.05, 2,  0.05, 2, true],
+      ['headTurnAmt',       'Head turn',      0,   80,  1,    0],
+      ['headTurnSpeed',     '↳ Speed',        0.1,  4,  0.1,  1, true],
+      ['headRotationMax',   '↳ 3D yaw (°)',   0,   45,  1,    0, true],
+      ['bodyShiftAmt',      'Body shift',     0,  100,  1,    0],
+      ['bodyShiftSpeed',    '↳ Speed',        0.05, 2,  0.05, 2, true],
+      ['bodyRotationMax',   '↳ 3D yaw (°)',   0,   30,  1,    0, true],
     ],
     'panel-anim': [
       ['anticipationAmt', 'Saccade anticipation', 0,    0.5,  0.01, 2],
@@ -2087,6 +2149,156 @@ function wsHandleMessage(msg) {
   }
 }
 
+</script>
+
+
+<script type="module">
+// ─────────────────────────────────────────────
+//  THREE.JS — Mo-style self-balancing robot
+// ─────────────────────────────────────────────
+import * as THREE from 'three';
+import { OrbitControls }      from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+const container  = document.getElementById('three-stage');
+const faceCanvas = document.getElementById('canvas');
+
+// ── Renderer ──
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+
+// ── Primary camera (user OrbitControls) ──
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+camera.position.set(0, 2.2, 7);
+
+// Future: traveling camera constrained to robot XZ, aimed at body.
+// Swap renderer.render(scene, camera) → renderer.render(scene, travelCam)
+// when driving mode is active.
+// const travelCam = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.4, 0);
+controls.enableDamping  = true;
+controls.dampingFactor  = 0.06;
+controls.minDistance    = 2;
+controls.maxDistance    = 20;
+controls.maxPolarAngle  = Math.PI * 0.88; // prevent going under the floor
+controls.update();
+
+// ── Lighting ──
+const ambient = new THREE.AmbientLight(0xffffff, 0.80);
+scene.add(ambient);
+
+const sun = new THREE.DirectionalLight(0xffffff, 0.65);
+sun.position.set(4, 8, 5);
+sun.castShadow = true;
+sun.shadow.mapSize.width  = 1024;
+sun.shadow.mapSize.height = 1024;
+sun.shadow.camera.left    = -5;
+sun.shadow.camera.right   =  5;
+sun.shadow.camera.top     =  8;
+sun.shadow.camera.bottom  = -2;
+sun.shadow.camera.near    =  1;
+sun.shadow.camera.far     = 25;
+sun.shadow.bias           = -0.001;
+scene.add(sun);
+
+const fill = new THREE.DirectionalLight(0x8899ff, 0.18);
+fill.position.set(-4, 3, -3);
+scene.add(fill);
+
+// ── Materials ──
+const robotMat  = new THREE.MeshLambertMaterial({ color: 0xe2e2e0 });
+const wheelMat  = new THREE.MeshLambertMaterial({ color: 0x202028 });
+const floorMat  = new THREE.MeshLambertMaterial({ color: 0x18181f });
+
+const faceTexture      = new THREE.CanvasTexture(faceCanvas);
+faceTexture.colorSpace = THREE.SRGBColorSpace;
+const screenMat = new THREE.MeshBasicMaterial({ map: faceTexture });
+
+// ── Floor ──
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), floorMat);
+floor.rotation.x   = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// ── Robot dimensions ──
+const C  = 1.20;   // cube size (head and body are both C × C × C)
+const WR = 0.46;   // wheel radius
+const WT = 0.16;   // wheel tread thickness
+const R  = 0.07;   // box corner radius
+
+// ── Robot group (whole robot rotates for body yaw) ──
+const robot = new THREE.Group();
+scene.add(robot);
+
+// Body cube
+const body = new THREE.Mesh(new RoundedBoxGeometry(C, C, C, 3, R), robotMat);
+body.position.y = WR + C / 2;
+body.castShadow  = true;
+robot.add(body);
+
+// Head group (rotates independently for gaze)
+const headGroup = new THREE.Group();
+headGroup.position.y = WR + C + C / 2;
+robot.add(headGroup);
+
+const head = new THREE.Mesh(new RoundedBoxGeometry(C, C, C, 3, R), robotMat);
+head.castShadow = true;
+headGroup.add(head);
+
+// Face screen — square plane flush on front face
+const screen = new THREE.Mesh(new THREE.PlaneGeometry(C * 0.82, C * 0.82), screenMat);
+screen.position.z = C / 2 + 0.004;
+headGroup.add(screen);
+
+// Wheels — cylinders rotated to lie on their sides
+const wheelGeo = new THREE.CylinderGeometry(WR, WR, WT, 28);
+[-1, 1].forEach(side => {
+  const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+  wheel.rotation.z  = Math.PI / 2;
+  wheel.position.set(side * (C / 2 + WT / 2 + 0.02), WR, 0);
+  wheel.castShadow  = true;
+  robot.add(wheel);
+});
+
+// ── Resize ──
+function resize() {
+  const w = container.clientWidth  || container.offsetWidth  || 600;
+  const h = container.clientHeight || container.offsetHeight || 500;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── Per-frame update (called from main RAF loop) ──
+function update() {
+  faceTexture.needsUpdate = true;
+
+  const s = window.state;
+  const p = window.params;
+  if (s && p) {
+    headGroup.rotation.y = -s.head3DYaw   * Math.PI / 180;
+    headGroup.rotation.x =  s.head3DPitch * Math.PI / 180;
+    robot.rotation.y     = -s.body3DYaw   * Math.PI / 180;
+
+    // Sync background to stageBg color
+    const bg = window.colors?.stageBg ?? '#0a0a0f';
+    renderer.setClearColor(new THREE.Color(bg));
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+window.three = { update, resize };
 </script>
 
 </body>
