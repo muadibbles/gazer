@@ -144,9 +144,9 @@ See [docs/animation-principles.md](docs/animation-principles.md) for the full st
 
 See [docs/drive-system.md](docs/drive-system.md) for the full design.
 
-- [ ] Pressure/scoring — per-state pressure, novelty decay, hysteresis threshold
-- [ ] Drive layer — default pressure profiles define baseline temperament; autonomous floor when no stimulus is present
-- [ ] Rule engine — event bus maps external stimuli to pressure changes; micro-expressions for reactive punctuation
+- [x] Pressure/scoring — per-state pressure vector, novelty decay on active state, hysteresis threshold, `updateDrive()` each frame
+- [x] Drive layer — `driveProfile` defines resting pressure per state (baseline temperament); idle/curious oscillation from novelty decay
+- [x] Rule engine — `emitDriveEvent()` with built-in events (face_detected, speech_start, startle, etc.); `addPressure()` for direct injection; WebSocket `event` and `pressure` commands
 - [ ] Transition enforcer — reroutes illegal state jumps through intermediate states
 - [ ] Personal time — spatial memory of dwell history shapes idle gaze over a session
 

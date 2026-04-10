@@ -274,6 +274,54 @@ input[type="range"]::-webkit-slider-thumb {
   border-color: var(--accent);
   font-weight: 700;
 }
+/* Drive system controls */
+.drive-controls {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.drive-controls button {
+  flex: 1;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  padding: 4px 6px;
+}
+.drive-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 2px 0;
+}
+.drive-bar-name {
+  width: 70px;
+  text-align: right;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.drive-bar-track {
+  flex: 1;
+  height: 3px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.drive-bar-fill {
+  height: 100%;
+  background: rgba(74,247,196,0.35);
+  border-radius: 2px;
+  width: 0%;
+}
+.drive-bar-val {
+  width: 30px;
+  text-align: right;
+  color: var(--muted);
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
 /* Micro-expression trigger buttons — gold */
 .micro-btn {
   background: rgba(230, 184, 0, 0.10);
@@ -688,6 +736,44 @@ input[type="checkbox"].grid-cb:checked::after {
     </div></div>
   </div>
 
+  <div class="accordion" id="acc-drive">
+    <button class="acc-header" onclick="toggleAcc('acc-drive')">
+      Drive <span class="chevron">▾</span>
+    </button>
+    <div class="acc-body"><div class="acc-inner">
+
+      <div class="drive-controls">
+        <button id="drive-toggle" onclick="toggleDrive()">DRIVE OFF</button>
+        <button id="drive-pin-attn"   onclick="toggleDrivePin('attn')"   style="opacity:0.45">GAZE FREE</button>
+        <button id="drive-pin-affect" onclick="toggleDrivePin('affect')" style="opacity:0.45">EXPR FREE</button>
+      </div>
+
+      <div id="drive-sliders"></div>
+
+      <div id="drive-bars" style="margin-top:8px;display:none">
+        <div class="behavior-group-label" style="margin-bottom:6px">PRESSURE</div>
+        <div id="drive-bar-idle"        class="drive-bar-row"><span id="drive-bar-name-idle"        class="drive-bar-name">idle</span><div class="drive-bar-track"><div id="drive-bar-fill-idle"        class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-idle"        class="drive-bar-val">0.00</span></div>
+        <div id="drive-bar-attentive"   class="drive-bar-row"><span id="drive-bar-name-attentive"   class="drive-bar-name">attentive</span><div class="drive-bar-track"><div id="drive-bar-fill-attentive"   class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-attentive"   class="drive-bar-val">0.00</span></div>
+        <div id="drive-bar-curious"     class="drive-bar-row"><span id="drive-bar-name-curious"     class="drive-bar-name">curious</span><div class="drive-bar-track"><div id="drive-bar-fill-curious"     class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-curious"     class="drive-bar-val">0.00</span></div>
+        <div id="drive-bar-sleepy"      class="drive-bar-row"><span id="drive-bar-name-sleepy"      class="drive-bar-name">sleepy</span><div class="drive-bar-track"><div id="drive-bar-fill-sleepy"      class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-sleepy"      class="drive-bar-val">0.00</span></div>
+        <div id="drive-bar-alert"       class="drive-bar-row"><span id="drive-bar-name-alert"       class="drive-bar-name">alert</span><div class="drive-bar-track"><div id="drive-bar-fill-alert"       class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-alert"       class="drive-bar-val">0.00</span></div>
+        <div id="drive-bar-searching"   class="drive-bar-row"><span id="drive-bar-name-searching"   class="drive-bar-name">searching</span><div class="drive-bar-track"><div id="drive-bar-fill-searching"   class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-searching"   class="drive-bar-val">0.00</span></div>
+        <div id="drive-bar-listening"   class="drive-bar-row"><span id="drive-bar-name-listening"   class="drive-bar-name">listening</span><div class="drive-bar-track"><div id="drive-bar-fill-listening"   class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-listening"   class="drive-bar-val">0.00</span></div>
+        <div id="drive-bar-processing"  class="drive-bar-row"><span id="drive-bar-name-processing"  class="drive-bar-name">processing</span><div class="drive-bar-track"><div id="drive-bar-fill-processing"  class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-processing"  class="drive-bar-val">0.00</span></div>
+        <div id="drive-bar-speaking"    class="drive-bar-row"><span id="drive-bar-name-speaking"    class="drive-bar-name">speaking</span><div class="drive-bar-track"><div id="drive-bar-fill-speaking"    class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-speaking"    class="drive-bar-val">0.00</span></div>
+        <div id="drive-bar-waiting"     class="drive-bar-row"><span id="drive-bar-name-waiting"     class="drive-bar-name">waiting</span><div class="drive-bar-track"><div id="drive-bar-fill-waiting"     class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-waiting"     class="drive-bar-val">0.00</span></div>
+        <div id="drive-bar-engaged"     class="drive-bar-row"><span id="drive-bar-name-engaged"     class="drive-bar-name">engaged</span><div class="drive-bar-track"><div id="drive-bar-fill-engaged"     class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-engaged"     class="drive-bar-val">0.00</span></div>
+        <div id="drive-bar-confused"    class="drive-bar-row"><span id="drive-bar-name-confused"    class="drive-bar-name">confused</span><div class="drive-bar-track"><div id="drive-bar-fill-confused"    class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-confused"    class="drive-bar-val">0.00</span></div>
+        <div id="drive-bar-pleased"     class="drive-bar-row"><span id="drive-bar-name-pleased"     class="drive-bar-name">pleased</span><div class="drive-bar-track"><div id="drive-bar-fill-pleased"     class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-pleased"     class="drive-bar-val">0.00</span></div>
+        <div id="drive-bar-uncomfortable" class="drive-bar-row"><span id="drive-bar-name-uncomfortable" class="drive-bar-name">uncomfort.</span><div class="drive-bar-track"><div id="drive-bar-fill-uncomfortable" class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-uncomfortable" class="drive-bar-val">0.00</span></div>
+        <div id="drive-bar-waking"      class="drive-bar-row"><span id="drive-bar-name-waking"      class="drive-bar-name">waking</span><div class="drive-bar-track"><div id="drive-bar-fill-waking"      class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-waking"      class="drive-bar-val">0.00</span></div>
+        <div id="drive-bar-resting"     class="drive-bar-row"><span id="drive-bar-name-resting"     class="drive-bar-name">resting</span><div class="drive-bar-track"><div id="drive-bar-fill-resting"     class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-resting"     class="drive-bar-val">0.00</span></div>
+        <div id="drive-bar-interrupted" class="drive-bar-row"><span id="drive-bar-name-interrupted" class="drive-bar-name">interrupted</span><div class="drive-bar-track"><div id="drive-bar-fill-interrupted" class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-interrupted" class="drive-bar-val">0.00</span></div>
+      </div>
+
+    </div></div>
+  </div>
+
   <div class="accordion" id="acc-eye-shape">
     <button class="acc-header" onclick="toggleAcc('acc-eye-shape')">
       Eye Shape <span class="chevron">▾</span>
@@ -937,6 +1023,11 @@ const params = {
   blinkOvAmt:      0,     // 0 = off; how much the eye widens after opening (0–0.3)
   blinkOvDamp:     8,     // spring damping
   blinkOvStiff:    120,   // spring stiffness
+
+  // ── Drive system ──
+  driveNoveltyDecay: 0.20,  // pressure/s lost by the currently active state
+  driveRiseRate:     0.80,  // rate at which pressure rises toward profile target
+  driveHysteresis:   0.10,  // margin over current state required to trigger a switch
 };
 
 // ── Color params ──
@@ -1050,6 +1141,15 @@ const state = {
   microHoldTimer:  0,                // countdown for micro-expression auto-return
   microHoldReturn: null,             // affect key to return to after micro-expression
   microHoldDur:    0,                // initial hold duration (for progress bar %)
+
+  // Drive system
+  drive: {
+    enabled:      false,
+    pressure:     {},   // per-behavior pressure 0..1
+    attnPinned:   false,
+    affectPinned: false,
+  },
+
   behaviorTimer: 0,
 
   // Arc trail
@@ -1087,6 +1187,14 @@ let lastTime = null;
 //  BEHAVIOR CONTROLLER
 //  Each behavior returns a config that governs
 //  when and how gaze saccades are triggered.
+// ─────────────────────────────────────────────
+// Drive profile — resting pressure target per state (0 = no baseline pull)
+// These define the robot's baseline temperament when no stimulus is active.
+const driveProfile = {
+  idle:    0.40,   // strong pull back to idle — the default resting state
+  curious: 0.25,   // mild restlessness; will eventually displace idle due to novelty decay
+};
+
 // ─────────────────────────────────────────────
 
 const behaviors = {
@@ -1767,6 +1875,7 @@ function update(dt) {
     }
   }
 
+  updateDrive(dt);
   updateBlink(dt);
 
   // Smooth blink reaction for brow/mouth follow
@@ -2241,6 +2350,7 @@ function draw() {
   ctx.fillText(beh.label, 24, canvas.height - 24);
 
   updateCompUI();
+  updateDriveUI();
 }
 
 function updateCompUI() {
@@ -2267,6 +2377,67 @@ function updateCompUI() {
   }
 }
 
+
+function updateDriveUI() {
+  const d = state.drive;
+  const p = d.pressure;
+
+  // Toggle button label
+  const btn = document.getElementById('drive-toggle');
+  if (btn) {
+    btn.textContent = d.enabled ? 'DRIVE ON' : 'DRIVE OFF';
+    btn.style.background    = d.enabled ? 'rgba(74,247,196,0.18)' : '';
+    btn.style.borderColor   = d.enabled ? 'var(--iris)' : '';
+    btn.style.color         = d.enabled ? 'var(--iris)' : '';
+  }
+
+  const pinAttn   = document.getElementById('drive-pin-attn');
+  const pinAffect = document.getElementById('drive-pin-affect');
+  if (pinAttn) {
+    pinAttn.textContent   = d.attnPinned   ? 'GAZE PINNED'  : 'GAZE FREE';
+    pinAttn.style.opacity = d.attnPinned   ? '1' : '0.45';
+  }
+  if (pinAffect) {
+    pinAffect.textContent   = d.affectPinned ? 'EXPR PINNED'  : 'EXPR FREE';
+    pinAffect.style.opacity = d.affectPinned ? '1' : '0.45';
+  }
+
+  if (!d.enabled) return;
+
+  for (const key of Object.keys(behaviors)) {
+    const fill = document.getElementById('drive-bar-fill-' + key);
+    const valEl = document.getElementById('drive-bar-val-' + key);
+    const nameEl = document.getElementById('drive-bar-name-' + key);
+    if (!fill) continue;
+    const v = p[key] || 0;
+    fill.style.width = (v * 100).toFixed(1) + '%';
+    if (valEl) valEl.textContent = v.toFixed(2);
+    const isActive = key === state.attn || key === state.affect;
+    fill.style.background  = isActive ? 'var(--iris)' : 'rgba(74,247,196,0.35)';
+    if (nameEl) nameEl.style.color = isActive ? 'var(--iris)' : '';
+  }
+}
+
+function toggleDrive() {
+  state.drive.enabled = !state.drive.enabled;
+  if (state.drive.enabled) {
+    // Initialise pressures if empty
+    const p = state.drive.pressure;
+    for (const key of Object.keys(behaviors)) {
+      if (p[key] == null) p[key] = driveProfile[key] || 0;
+    }
+    logEvent('drive ON');
+  } else {
+    logEvent('drive OFF');
+  }
+  const bars = document.getElementById('drive-bars');
+  if (bars) bars.style.display = state.drive.enabled ? '' : 'none';
+}
+
+function toggleDrivePin(layer) {
+  if (layer === 'attn')   state.drive.attnPinned   = !state.drive.attnPinned;
+  if (layer === 'affect') state.drive.affectPinned = !state.drive.affectPinned;
+}
 
 // ─────────────────────────────────────────────
 //  MOUSE CONTROL — click to look
@@ -2517,6 +2688,97 @@ function microExpress(name, holdDur) {
   logEvent(`micro → ${name} (${holdDur.toFixed(2)}s) ✦`);
 }
 
+// ── Drive system ─────────────────────────────────────────────────────────────
+
+// Inject pressure into a named state (used by rule engine and WebSocket)
+function addPressure(stateName, amount) {
+  if (!behaviors[stateName]) return;
+  const p = state.drive.pressure;
+  p[stateName] = Math.min(1, (p[stateName] || 0) + amount);
+}
+
+// Called every frame — advance pressure dynamics and fire transitions
+function updateDrive(dt) {
+  const d = state.drive;
+  if (!d.enabled) return;
+
+  const p = d.pressure;
+
+  // Initialise missing entries
+  for (const key of Object.keys(behaviors)) {
+    if (p[key] == null) p[key] = driveProfile[key] || 0;
+  }
+
+  // Advance pressure for every state
+  for (const key of Object.keys(behaviors)) {
+    const target = driveProfile[key] || 0;
+    // Rise toward profile target
+    p[key] += (target - p[key]) * Math.min(1, params.driveRiseRate * dt);
+    // Novelty decay on whichever state(s) are currently active
+    if (key === state.attn || key === state.affect) {
+      p[key] = Math.max(0, p[key] - params.driveNoveltyDecay * dt);
+    }
+    p[key] = Math.max(0, Math.min(1, p[key]));
+  }
+
+  // Resolve winner — highest pressure state
+  let winKey = state.attn;
+  let winVal = p[state.attn] || 0;
+  for (const [k, v] of Object.entries(p)) {
+    if (v > winVal) { winKey = k; winVal = v; }
+  }
+
+  // Only switch if not mid-hold (interrupted etc.) and margin exceeds hysteresis
+  if (state.holdTimer <= 0) {
+    if (!d.attnPinned && winKey !== state.attn &&
+        winVal > (p[state.attn] || 0) + params.driveHysteresis) {
+      setAttn(winKey);
+    }
+    if (!d.affectPinned && winKey !== state.affect &&
+        winVal > (p[state.affect] || 0) + params.driveHysteresis) {
+      setAffect(winKey);
+    }
+  }
+}
+
+// Emit a named event — fires matching rules and built-in responses
+function emitDriveEvent(eventName, data) {
+  data = data || {};
+  switch (eventName) {
+    case 'face_detected':
+      addPressure('attentive', 0.50);
+      if (data.x != null) triggerSaccade(
+        Math.max(-0.9, Math.min(0.9, +data.x)),
+        Math.max(-0.7, Math.min(0.7, +(data.y || 0)))
+      );
+      break;
+    case 'face_lost':
+      addPressure('searching', 0.40);
+      break;
+    case 'speech_start':
+      addPressure('listening', 0.60);
+      break;
+    case 'speech_end':
+      addPressure('idle', 0.20);
+      break;
+    case 'startle':
+      addPressure('alert', 0.30);
+      microExpress('alert', 0.15);
+      break;
+    case 'error':
+      addPressure('uncomfortable', 0.40);
+      microExpress('uncomfortable', 0.25);
+      break;
+    case 'success':
+      addPressure('pleased', 0.35);
+      microExpress('pleased', 0.25);
+      break;
+  }
+  logEvent(`event: ${eventName}`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Legacy / linked mode — sets both layers simultaneously
 function setBehavior(name) {
   if (!behaviors[name]) return;
@@ -2727,6 +2989,11 @@ function buildControlPanels() {
       ['stiPersist',     'Marker persist', 'bool'],
       ['stiSize',        'Marker size',    3,    30,  1,    0],
     ],
+    'drive-sliders': [
+      ['driveNoveltyDecay', 'Novelty decay',  0.01, 0.8,  0.01, 2],
+      ['driveRiseRate',     'Rise rate',      0.1,  3.0,  0.05, 2],
+      ['driveHysteresis',   'Hysteresis',     0.0,  0.5,  0.01, 2],
+    ],
   };
 
   Object.entries(sections).forEach(([panelId, controls]) => {
@@ -2852,6 +3119,14 @@ function wsHandleMessage(msg) {
 
     case 'micro':
       microExpress(msg.value, msg.hold != null ? parseFloat(msg.hold) : undefined);
+      break;
+
+    case 'event':
+      emitDriveEvent(msg.value, msg.data);
+      break;
+
+    case 'pressure':
+      if (behaviors[msg.state]) addPressure(msg.state, parseFloat(msg.amount) || 0.3);
       break;
 
     case 'param':
