@@ -2289,9 +2289,9 @@ function update() {
   const s = window.state;
   const p = window.params;
   if (s && p) {
-    headGroup.rotation.y = -s.head3DYaw   * Math.PI / 180;
+    headGroup.rotation.y =  s.head3DYaw   * Math.PI / 180;
     headGroup.rotation.x =  s.head3DPitch * Math.PI / 180;
-    robot.rotation.y     = -s.body3DYaw   * Math.PI / 180;
+    robot.rotation.y     =  s.body3DYaw   * Math.PI / 180;
 
     // Sync background to stageBg color
     const bg = window.colors?.stageBg ?? '#0a0a0f';
