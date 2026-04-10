@@ -166,7 +166,7 @@ See [docs/environmental-triggers.md](docs/environmental-triggers.md) for the ful
 - [x] Global face translation — subtle whole-face shift toward gaze target, parent transform above gaze
 - [x] Motion cascade — layered delays: pupils → face shift → head turn → body shift, each with independent speed and amount
 - [x] Squash & stretch — eye shape deforms slightly during fast saccades
-- [ ] Fix squash & stretch — deformation currently scales the whole eye (same issue as old blink); should deform only the iris/pupil while the blink lid occlusion model is respected
+- [ ] Fix squash & stretch — two issues: (1) deformation scales the whole eye rather than just iris/pupil (same root issue as the old blink scaling trick); (2) fires regardless of blink state, so a saccade during a blink leaves residual spring deformation that's still decaying when the eye reopens
 - [x] Spring physics — head/body rotation uses underdamped spring dynamics; natural ease-in/out and slight overshoot on every movement
 - [x] Arc motion — head tilts into yaw turns, body leans during rotation; 3D motion traces curves through space
 - [x] Principles off switch — button zeros arc curvature, squash/stretch, anticipation, follow-through, arc tilt/lean, cascade, blink anticipation/overshoot, and forces linear easing + critically-damped springs; snapshot restores originals on toggle-back
