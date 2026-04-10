@@ -372,6 +372,26 @@ textarea.json-area {
 
 <div class="panel">
 
+  <div class="accordion open" id="acc-ws">
+    <button class="acc-header" onclick="toggleAcc('acc-ws')">
+      WebSocket API <span class="chevron">▾</span>
+    </button>
+    <div class="acc-body"><div class="acc-inner">
+      <div class="ws-status-row">
+        <span class="ws-dot" id="ws-dot"></span>
+        <span class="ws-status-text" id="ws-status-text">disconnected</span>
+      </div>
+      <div class="control-row">
+        <label>Server URL</label>
+        <input class="ws-url-input" type="text" id="ws-url" value="ws://localhost:8765" />
+      </div>
+      <div class="btn-row">
+        <button onclick="wsConnect()">Connect</button>
+        <button onclick="wsDisconnect()">Disconnect</button>
+      </div>
+    </div></div>
+  </div>
+
   <div class="accordion open" id="acc-behavior">
     <button class="acc-header" onclick="toggleAcc('acc-behavior')">
       Behavior <span class="chevron">▾</span>
@@ -461,26 +481,6 @@ textarea.json-area {
       Colors <span class="chevron">▾</span>
     </button>
     <div class="acc-body"><div class="acc-inner" id="panel-colors"></div></div>
-  </div>
-
-  <div class="accordion" id="acc-ws">
-    <button class="acc-header" onclick="toggleAcc('acc-ws')">
-      WebSocket API <span class="chevron">▾</span>
-    </button>
-    <div class="acc-body"><div class="acc-inner">
-      <div class="ws-status-row">
-        <span class="ws-dot" id="ws-dot"></span>
-        <span class="ws-status-text" id="ws-status-text">disconnected</span>
-      </div>
-      <div class="control-row">
-        <label>Server URL</label>
-        <input class="ws-url-input" type="text" id="ws-url" value="ws://localhost:8765" />
-      </div>
-      <div class="btn-row">
-        <button onclick="wsConnect()">Connect</button>
-        <button onclick="wsDisconnect()">Disconnect</button>
-      </div>
-    </div></div>
   </div>
 
   <div class="accordion" id="acc-export">
