@@ -1213,11 +1213,12 @@ function update(dt) {
   state.bodyX = lerp(state.bodyX, state.gazeX * params.bodyShiftAmt,     params.bodyShiftSpeed);
   state.bodyY = lerp(state.bodyY, state.gazeY * params.bodyShiftAmt,     params.bodyShiftSpeed);
 
-  // 3D rotation (drives Three.js scene via window.three)
-  state.head3DYaw   = lerp(state.head3DYaw,   state.gazeX *  params.headRotationMax,        params.head3DSpeed);
-  state.head3DPitch = lerp(state.head3DPitch,  state.gazeY *  params.headRotationMax * 0.35, params.head3DSpeed);
-  if (!state.gazeTargetActive)
-    state.body3DYaw = lerp(state.body3DYaw, state.gazeX * params.bodyRotationMax, params.body3DSpeed);
+  // 3D rotation — bypassed when Three.js tracking is active
+  if (!state.gazeTargetActive) {
+    state.head3DYaw   = lerp(state.head3DYaw,   state.gazeX *  params.headRotationMax,        params.head3DSpeed);
+    state.head3DPitch = lerp(state.head3DPitch,  state.gazeY *  params.headRotationMax * 0.35, params.head3DSpeed);
+    state.body3DYaw   = lerp(state.body3DYaw,    state.gazeX *  params.bodyRotationMax,        params.body3DSpeed);
+  }
 
   // ── Squash & stretch ──
   if (params.squashStretch > 0) {
@@ -2434,12 +2435,35 @@ function preUpdate(dt) {
   const p = window.params;
   if (!s || !p) return;
 
-  // Body always turns to face ball — override normal gazeX*bodyRotationMax lerp
-  s.gazeTargetActive = true;
-  const worldAngleDeg = Math.atan2(ball.position.x, ball.position.z) * 180 / Math.PI;
-  s.body3DYaw += (worldAngleDeg - s.body3DYaw) * Math.min(1, dt * 4);
+  s.gazeTargetActive = true; // block main-update 3D lerps
 
-  // Gaze (pupil/head) override only while dragging
+  const targetAngleDeg = Math.atan2(ball.position.x, ball.position.z) * 180 / Math.PI;
+  const maxHead        = p.headRotationMax;
+
+  // ── Head leads: tracks target in world space, clamped to its rotation limit ──
+  const headWorldAngle = s.body3DYaw + s.head3DYaw;
+  const headSpeed      = p.head3DSpeed * 80; // convert slider scale → dt-based
+  const newHeadWorld   = headWorldAngle + (targetAngleDeg - headWorldAngle) * Math.min(1, dt * headSpeed);
+  s.head3DYaw          = Math.max(-maxHead, Math.min(maxHead, newHeadWorld - s.body3DYaw));
+
+  // Vertical: head pitch toward ball
+  const headWorld = new THREE.Vector3();
+  headGroup.getWorldPosition(headWorld);
+  const dir     = new THREE.Vector3().subVectors(ball.position, headWorld);
+  const dist2D  = Math.sqrt(dir.x * dir.x + dir.z * dir.z);
+  const pitchDeg = -Math.atan2(dir.y, dist2D) * 180 / Math.PI;
+  s.head3DPitch  += (pitchDeg - s.head3DPitch) * Math.min(1, dt * headSpeed);
+
+  // ── Body follows: only kicks in when head is stretched past 60% of its range ──
+  const bodySpeed    = p.body3DSpeed * 80;
+  const deadband     = maxHead * 0.6;
+  const absHead      = Math.abs(s.head3DYaw);
+  if (absHead > deadband) {
+    const excess  = s.head3DYaw - Math.sign(s.head3DYaw) * deadband;
+    s.body3DYaw  += excess * Math.min(1, dt * bodySpeed);
+  }
+
+  // ── Pupil/gaze override while actively dragging ──
   if (isDragging) {
     const { gx, gy } = computeGazeFromBall();
     s.gazeX         = gx;
