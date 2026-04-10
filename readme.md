@@ -7,7 +7,7 @@ An exploration of the 12 principles of animation applied to robotics — using a
 ## What it does
 
 - **Smooth arc saccades** — eye movement follows quadratic bezier curves, not linear paths, so it feels alive
-- **Compositor** — two independent layers: *gaze* (controls saccade pattern) and *expression* (controls lids, brows, mouth); any behavior can be used as either template, mixed freely
+- **Compositor** — two independent layers: *gaze* (controls saccade pattern) and *expression* (controls lids, brows, mouth); any behavior can be used as either template, mixed freely — see [Expressive Response](docs/expressive-response.md)
 - **Transition blending** — each state defines its own blend-in duration and easing curve; pair-specific overrides for dramatic shifts; `interrupted` snaps in and auto-returns after 0.5s
 - **Easing library** — `inOutCubic`, `outBack`, `outQuart`, `inOutQuint` built in, easy to extend
 - **Blink system** — natural blink timing per behavior, with anticipation and follow-through spring
@@ -211,7 +211,6 @@ Areas with room to grow: **exaggeration** (states could push harder at extremes;
 - [ ] Gazer personal time — when not attending to an operator target or external stimulus, gazer explores the space autonomously and builds its own spatial memories: locations it has looked at, how long, how often. Over time these memories shape where it chooses to look during idle, giving it a sense of accumulated experience and preference.
 
 ### Expression System
-- [ ] Emotion layer (surprise, disgust, joy) — drives eyelids, brows, mouth together as named presets
 - [ ] Environmental context awareness — context tags (e.g. "Meeting", "Reading") influence behavior parameters
 
 ### Animation Hierarchy
