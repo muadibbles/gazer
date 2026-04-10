@@ -98,6 +98,9 @@ The behavior controller is designed for expansion — each behavior is just a co
 - [ ] Emotion layer (surprise, disgust, joy) — drives eyelids, brows, mouth together
 - [ ] Environmental context awareness — context tags (e.g. "Meeting", "Reading") influence behavior parameters
 
+### Animation Hierarchy
+- [ ] Global face translation — subtle whole-face shift toward the current gaze target, parent transform above gaze direction so the entire rig moves together
+
 ### 3D & Platform
 - [ ] 3D body — three.js scene using the face as the character's face
 - [ ] WebSocket API — external behavior triggers
