@@ -1300,8 +1300,9 @@ function drawLids(eye) {
   const lowerP = beh.lowerLid();
   if (upperP <= 0 && lowerP <= 0) return;
 
+  const { sign } = eye;
   const curv    = params.lidCurvature;
-  const lidRot  = rot + params.lidRotation * Math.PI / 180;
+  const lidRot  = rot + params.lidRotation * Math.PI / 180 * sign;
 
   ctx.save();
   // Clip to the eye ellipse so lids stay within the eye boundary
