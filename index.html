@@ -922,7 +922,7 @@ const params = {
   pupilBiasY:      0,
 
   // ── Brows ──
-  browSpacing:     220,  // mirrors eyeSpacing
+  browSpacingOffset: 0,    // pixels inward/outward from eye center (0 = directly above eye)
   browOffsetY:     90,   // pixels above eye center
   browWidth:       130,
   browThickness:   14,
@@ -2170,7 +2170,7 @@ function drawBlinkLid(eye) {
   ctx.moveTo(-rx,  -displayRy - 2);
   ctx.lineTo( rx,  -displayRy - 2);
   ctx.lineTo( rx,   edgeY);
-  ctx.quadraticCurveTo(0, edgeY + bow, -rx, edgeY);
+  ctx.quadraticCurveTo(0, edgeY - bow, -rx, edgeY);
   ctx.closePath();
   ctx.fill();
 
@@ -2180,11 +2180,11 @@ function drawBlinkLid(eye) {
   ctx.moveTo(-rx,  displayRy + 2);
   ctx.lineTo( rx,  displayRy + 2);
   ctx.lineTo( rx,  lowerRiseY);
-  ctx.quadraticCurveTo(0, lowerRiseY - bow * 0.25, -rx, lowerRiseY);
+  ctx.quadraticCurveTo(0, lowerRiseY + bow * 0.25, -rx, lowerRiseY);
   ctx.closePath();
   ctx.fill();
 
-  // ── Crescent — ⌣ edge of the upper lid, visible as the closed-eye shape ──
+  // ── Crescent — ⌢ edge of the upper lid, visible as the closed-eye shape ──
   const cw = Math.max(1, displayRy * params.blinkCrescentWidth);
   ctx.globalAlpha = Math.min(1, t * 3);   // fades in quickly, full by t≈0.33
   ctx.strokeStyle = colors.eyeColor;
@@ -2192,7 +2192,7 @@ function drawBlinkLid(eye) {
   ctx.lineCap     = 'round';
   ctx.beginPath();
   ctx.moveTo(-rx * 0.78, edgeY);
-  ctx.quadraticCurveTo(0, edgeY + bow, rx * 0.78, edgeY);
+  ctx.quadraticCurveTo(0, edgeY - bow, rx * 0.78, edgeY);
   ctx.stroke();
   ctx.globalAlpha = 1;
 
@@ -2310,10 +2310,10 @@ function drawMouth() {
 }
 
 function drawBrow(eye) {
-  const { cy, sign } = eye;
+  const { cx, cy, sign } = eye;
   const beh = getBehavior();
 
-  const bx        = params.eyeCenterX + (params.browSpacing / 2) * sign;
+  const bx        = cx + params.browSpacingOffset * sign;
   const browReact = params.blinkBrowReact ? params.blinkBrowAmt * state.blinkReact : 0;
   const offsetY   = params.browOffsetY + beh.browRaise() - browReact;
   const width     = params.browWidth;
@@ -3039,7 +3039,7 @@ function buildControlPanels() {
       ['eyeCenterX',   'Center X',   50,  550,  1,    0],
       ['eyeCenterY',   'Center Y',   50,  550,  1,    0],
       ['eyeSpacing',   'Spacing',    20,  500,  1,    0],
-      ['browSpacing',  '↳ Brow',    20,  500,  1,    0, true],
+      ['browSpacingOffset', '↳ Brow offset', -80, 80, 1, 0, true],
       ['pupilSpacing', '↳ Pupil',   -1,    1,   0.01, 2, true],
     ],
     'panel-pupil': [
