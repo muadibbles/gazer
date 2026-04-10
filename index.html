@@ -622,6 +622,13 @@ input[type="checkbox"].grid-cb:checked::after {
 
 <div class="panel">
 
+  <div style="padding:6px 0 10px">
+    <button id="principles-btn" onclick="togglePrinciples()"
+      style="width:100%;font-size:9px;letter-spacing:0.1em;padding:5px 0">
+      PRINCIPLES ON
+    </button>
+  </div>
+
   <div class="accordion open" id="acc-behavior">
     <button class="acc-header" onclick="toggleAcc('acc-behavior')">
       Compositor <span class="chevron">▾</span>
@@ -1028,6 +1035,9 @@ const params = {
   driveNoveltyDecay: 0.20,  // pressure/s lost by the currently active state
   driveRiseRate:     0.80,  // rate at which pressure rises toward profile target
   driveHysteresis:   0.10,  // margin over current state required to trigger a switch
+
+  // ── 12 Principles master switch ──
+  principlesEnabled: true,  // false = mechanical baseline (no arcs, easing, squash, cascade, overshoot)
 };
 
 // ── Color params ──
@@ -1194,6 +1204,21 @@ const driveProfile = {
   idle:    0.40,   // strong pull back to idle — the default resting state
   curious: 0.25,   // mild restlessness; will eventually displace idle due to novelty decay
 };
+
+// Transition enforcer — states that restrict which states they can exit to.
+// Anything not in `allow` gets rerouted through `via` instead.
+// Applied only by the drive system; manual overrides bypass it.
+const transEnforcer = {
+  resting: { allow: ['interrupted', 'waking'],                      via: 'waking' },
+  waking:  { allow: ['idle', 'attentive', 'alert', 'interrupted'],  via: 'idle'   },
+};
+
+function enforceTransition(from, to) {
+  const rule = transEnforcer[from];
+  if (!rule) return to;
+  if (rule.allow.includes(to)) return to;
+  return rule.via;
+}
 
 // ─────────────────────────────────────────────
 
@@ -1571,7 +1596,7 @@ function setupArcSegment(startX, startY, endX, endY) {
   const dist   = Math.sqrt(dx * dx + dy * dy);
   arc.duration = (0.15 + dist * 0.6) / (params.gazeSpeed * beh.speedMult);
   arc.t        = 0;
-  arc.easeFn   = beh.easeFn();
+  arc.easeFn   = params.principlesEnabled ? beh.easeFn() : (t => t);
 }
 
 function triggerSaccade(targetX, targetY) {
@@ -1803,10 +1828,11 @@ function update(dt) {
   // 3D rotation — bypassed when Three.js tracking is active
   // Spring physics (Principles 5 + 6): natural ease-in/out + follow-through overshoot
   if (!state.gazeTargetActive) {
+    const springZeta = params.principlesEnabled ? 0.7 : 1.0; // 0.7 = overshoot; 1.0 = no overshoot
     const headStiff = params.head3DSpeed * 200;
-    const headDamp  = 2 * Math.sqrt(headStiff) * 0.7;   // ~70% critical — slight overshoot
+    const headDamp  = 2 * Math.sqrt(headStiff) * springZeta;
     const bodyStiff = params.body3DSpeed * 200;
-    const bodyDamp  = 2 * Math.sqrt(bodyStiff) * 0.7;
+    const bodyDamp  = 2 * Math.sqrt(bodyStiff) * springZeta;
 
     const headYawAcc    = headStiff * (state.gazeX * params.headRotationMax - state.head3DYaw) - headDamp * state.head3DYawVel;
     state.head3DYawVel += headYawAcc * dt;
@@ -2439,6 +2465,45 @@ function toggleDrivePin(layer) {
   if (layer === 'affect') state.drive.affectPinned = !state.drive.affectPinned;
 }
 
+// ── 12 Principles off switch ──────────────────────────────────────────────────
+
+const PRINCIPLES_ZERO = {
+  arcCurvature:     0,
+  squashStretch:    0,
+  anticipationAmt:  0,
+  overshootAmt:     0,
+  headArcFactor:    0,
+  bodyArcFactor:    0,
+  faceTranslateAmt: 0,
+  headTurnAmt:      0,
+  bodyShiftAmt:     0,
+  blinkAntAmt:      0,
+  blinkOvAmt:       0,
+};
+
+let _principlesSnapshot = null;
+
+function togglePrinciples() {
+  params.principlesEnabled = !params.principlesEnabled;
+  if (!params.principlesEnabled) {
+    _principlesSnapshot = {};
+    for (const k of Object.keys(PRINCIPLES_ZERO)) _principlesSnapshot[k] = params[k];
+    Object.assign(params, PRINCIPLES_ZERO);
+    logEvent('principles OFF — mechanical baseline');
+  } else {
+    if (_principlesSnapshot) Object.assign(params, _principlesSnapshot);
+    logEvent('principles ON');
+  }
+  syncAllSliders();
+  const btn = document.getElementById('principles-btn');
+  if (btn) {
+    btn.textContent    = params.principlesEnabled ? 'PRINCIPLES ON' : 'PRINCIPLES OFF';
+    btn.style.background  = params.principlesEnabled ? '' : 'rgba(255,107,107,0.15)';
+    btn.style.borderColor = params.principlesEnabled ? '' : 'rgba(255,107,107,0.5)';
+    btn.style.color       = params.principlesEnabled ? '' : 'var(--accent)';
+  }
+}
+
 // ─────────────────────────────────────────────
 //  MOUSE CONTROL — click to look
 // ─────────────────────────────────────────────
@@ -2728,15 +2793,18 @@ function updateDrive(dt) {
     if (v > winVal) { winKey = k; winVal = v; }
   }
 
+  // Don't fire while a blend is still in progress — let transitions complete
+  if (state.transBlend < 0.9) return;
+
   // Only switch if not mid-hold (interrupted etc.) and margin exceeds hysteresis
   if (state.holdTimer <= 0) {
     if (!d.attnPinned && winKey !== state.attn &&
         winVal > (p[state.attn] || 0) + params.driveHysteresis) {
-      setAttn(winKey);
+      setAttn(enforceTransition(state.attn, winKey));
     }
     if (!d.affectPinned && winKey !== state.affect &&
         winVal > (p[state.affect] || 0) + params.driveHysteresis) {
-      setAffect(winKey);
+      setAffect(enforceTransition(state.affect, winKey));
     }
   }
 }
@@ -3412,9 +3480,9 @@ function preUpdate(dt) {
   const HEAD_SHARE   = 0.75;
   const EYE_NORM_DEG = 15; // 25% of 60° total range → ±1 gazeX/Y
   const headStiff    = p.head3DSpeed * 4000;
-  const headDamp     = p.headSpringDamp;
+  const headDamp     = p.principlesEnabled ? p.headSpringDamp : 2 * Math.sqrt(headStiff); // critical when off
   const bodyStiff    = p.body3DSpeed * 3000;
-  const bodyDamp     = p.bodySpringDamp;
+  const bodyDamp     = p.principlesEnabled ? p.bodySpringDamp : 2 * Math.sqrt(bodyStiff);
   const maxHead      = p.headRotationMax;
 
   // ── Yaw: head spring toward 75% of target, eyes cover the remaining 25% ──

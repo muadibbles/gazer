@@ -148,7 +148,7 @@ See [docs/drive-system.md](docs/drive-system.md) for the full design.
 - [x] Pressure/scoring — per-state pressure vector, novelty decay on active state, hysteresis threshold, `updateDrive()` each frame
 - [x] Drive layer — `driveProfile` defines resting pressure per state (baseline temperament); idle/curious oscillation from novelty decay
 - [x] Rule engine — `emitDriveEvent()` with built-in events (face_detected, speech_start, startle, etc.); `addPressure()` for direct injection; WebSocket `event` and `pressure` commands
-- [ ] Transition enforcer — reroutes illegal state jumps through intermediate states
+- [x] Transition enforcer — `transEnforcer` table reroutes illegal drive-originated jumps through intermediate states (e.g. `resting→anything` goes via `waking`); blend-guard prevents drive from interrupting in-progress transitions
 - [ ] Personal time — spatial memory of dwell history shapes idle gaze over a session
 
 ### Expression System
@@ -160,7 +160,7 @@ See [docs/drive-system.md](docs/drive-system.md) for the full design.
 - [x] Squash & stretch — eye shape deforms slightly during fast saccades
 - [x] Spring physics — head/body rotation uses underdamped spring dynamics; natural ease-in/out and slight overshoot on every movement
 - [x] Arc motion — head tilts into yaw turns, body leans during rotation; 3D motion traces curves through space
-- [ ] Principles off switch — single checkbox that zeros all animation principle parameters (squash/stretch, anticipation, follow-through, arc curvature, easing, cascade delays) to show the mechanical baseline; useful for demonstrating what the principles actually contribute
+- [x] Principles off switch — button zeros arc curvature, squash/stretch, anticipation, follow-through, arc tilt/lean, cascade, blink anticipation/overshoot, and forces linear easing + critically-damped springs; snapshot restores originals on toggle-back
 
 ### API & Integration
 - [x] WebSocket API — relay server + browser client; external processes send `behavior`, `attn`, `affect`, `param`, `look`, `blink`, `color`, `event`, `pressure`, `micro` commands
