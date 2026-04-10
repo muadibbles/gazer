@@ -505,6 +505,13 @@ input[type="checkbox"].grid-cb:checked::after {
     <div class="acc-body"><div class="acc-inner" id="panel-gaze"></div></div>
   </div>
 
+  <div class="accordion" id="acc-motion">
+    <button class="acc-header" onclick="toggleAcc('acc-motion')">
+      Motion Cascade <span class="chevron">▾</span>
+    </button>
+    <div class="acc-body"><div class="acc-inner" id="panel-motion"></div></div>
+  </div>
+
   <div class="accordion" id="acc-anim">
     <button class="acc-header" onclick="toggleAcc('acc-anim')">
       Animation <span class="chevron">▾</span>
@@ -644,8 +651,14 @@ const params = {
   pauseMin:        1.50,
   pauseMax:        3.50,
   microSaccade:    0.02,
-  faceTranslateAmt:   0,   // px the whole face drifts toward gaze (0 = off)
-  faceTranslateSpeed: 1.5, // lerp rate (higher = snappier follow)
+
+  // ── Motion Cascade (pupils → face → head → body) ──
+  faceTranslateAmt:   0,   // px face shifts toward gaze target
+  faceTranslateSpeed: 1.5, // lerp speed (fast follower)
+  headTurnAmt:        0,   // px head shifts (slower, larger range)
+  headTurnSpeed:      0.6, // lerp speed
+  bodyShiftAmt:       0,   // px body shifts (slowest)
+  bodyShiftSpeed:     0.3, // lerp speed
 
   // ── Anticipation (saccade) ──
   anticipationAmt: 0,     // 0 = off; 0.1–0.4 = wind-up distance (ratio of saccade dist)
@@ -778,9 +791,10 @@ const state = {
   // Blink reaction (smoothed blink.t for facial reactions)
   blinkReact: 0,
 
-  // Global face translation (drifts toward gaze target)
-  faceX: 0,
-  faceY: 0,
+  // Motion cascade offsets (all compound in draw)
+  faceX: 0, faceY: 0,
+  headX: 0, headY: 0,
+  bodyX: 0, bodyY: 0,
 };
 
 let lastTime = null;
@@ -1111,17 +1125,15 @@ function update(dt) {
     }
   }
 
-  // Global face translation — whole face drifts toward gaze target
-  if (params.faceTranslateAmt > 0) {
-    const targetFX = state.gazeX * params.faceTranslateAmt;
-    const targetFY = state.gazeY * params.faceTranslateAmt;
-    const t = Math.min(1, params.faceTranslateSpeed * dt);
-    state.faceX += (targetFX - state.faceX) * t;
-    state.faceY += (targetFY - state.faceY) * t;
-  } else {
-    state.faceX = 0;
-    state.faceY = 0;
-  }
+  // Motion cascade — pupils move instantly (gazeX/Y), each body layer
+  // lerps toward the gaze target at its own speed, creating natural trail.
+  const lerp = (cur, tgt, speed) => cur + (tgt - cur) * Math.min(1, speed * dt);
+  state.faceX = lerp(state.faceX, state.gazeX * params.faceTranslateAmt, params.faceTranslateSpeed);
+  state.faceY = lerp(state.faceY, state.gazeY * params.faceTranslateAmt, params.faceTranslateSpeed);
+  state.headX = lerp(state.headX, state.gazeX * params.headTurnAmt,      params.headTurnSpeed);
+  state.headY = lerp(state.headY, state.gazeY * params.headTurnAmt,      params.headTurnSpeed);
+  state.bodyX = lerp(state.bodyX, state.gazeX * params.bodyShiftAmt,     params.bodyShiftSpeed);
+  state.bodyY = lerp(state.bodyY, state.gazeY * params.bodyShiftAmt,     params.bodyShiftSpeed);
 
   updateBlink(dt);
 
@@ -1536,9 +1548,12 @@ function draw() {
   ctx.fillStyle = colors.canvasBg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // ── Global face translation (parent transform) ──
+  // ── Motion cascade (parent transform: face + head + body compound) ──
   ctx.save();
-  ctx.translate(state.faceX, state.faceY);
+  ctx.translate(
+    state.faceX + state.headX + state.bodyX,
+    state.faceY + state.headY + state.bodyY
+  );
 
   getEyes().forEach(eye => { drawEye(eye); if (params.showLids) drawLids(eye); if (params.showBrows) drawBrow(eye); });
   getEyes().forEach(eye => { drawTrail(eye); drawSTI(eye); });
@@ -1842,9 +1857,15 @@ function buildControlPanels() {
       ['gazeRangeY',        'Range Y',            0.05, 2,   0.01, 2],
       ['pauseMin',          'Pause min',          0.1,  10,  0.1,  1],
       ['pauseMax',          'Pause max',          0.1,  20,  0.1,  1],
-      ['microSaccade',      'Micro-drift',        0,    1,   0.01, 2],
-      ['faceTranslateAmt',  'Face shift amount',  0,    50,  1,    0],
-      ['faceTranslateSpeed','Face shift speed',   0.2,  8,   0.1,  1],
+      ['microSaccade', 'Micro-drift', 0, 1, 0.01, 2],
+    ],
+    'panel-motion': [
+      ['faceTranslateAmt',  'Face shift',    0,   50,  1,    0],
+      ['faceTranslateSpeed','↳ Speed',       0.2,  8,  0.1,  1, true],
+      ['headTurnAmt',       'Head turn',     0,   80,  1,    0],
+      ['headTurnSpeed',     '↳ Speed',       0.1,  4,  0.1,  1, true],
+      ['bodyShiftAmt',      'Body shift',    0,  100,  1,    0],
+      ['bodyShiftSpeed',    '↳ Speed',       0.05, 2,  0.05, 2, true],
     ],
     'panel-anim': [
       ['anticipationAmt', 'Saccade anticipation', 0,    0.5,  0.01, 2],
