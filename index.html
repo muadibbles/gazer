@@ -353,6 +353,50 @@ textarea.json-area {
 }
 .ws-url-input:focus { border-color: var(--iris); }
 
+/* Grid toggle */
+.grid-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+.grid-toggle-row label {
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+input[type="checkbox"].grid-cb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+}
+input[type="checkbox"].grid-cb:checked {
+  background: var(--iris);
+  border-color: var(--iris);
+}
+input[type="checkbox"].grid-cb:checked::after {
+  content: '';
+  position: absolute;
+  left: 3px; top: 1px;
+  width: 5px; height: 8px;
+  border: 2px solid var(--bg);
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+
   </style>
 </head>
 <body>
@@ -381,6 +425,10 @@ textarea.json-area {
         <button onclick="wsDisconnect()">Disconnect</button>
       </div>
     </div></div>
+  </div>
+  <div class="grid-toggle-row">
+    <input type="checkbox" class="grid-cb" id="grid-toggle" onchange="showGrid = this.checked" />
+    <label for="grid-toggle">Planning Grid</label>
   </div>
   <div class="log" id="log"></div>
 </div>
@@ -1357,6 +1405,74 @@ function drawBrow(eye) {
   ctx.restore();
 }
 
+// ─────────────────────────────────────────────
+//  PLANNING GRID OVERLAY
+// ─────────────────────────────────────────────
+
+let showGrid = false;
+
+function drawGrid() {
+  const w = canvas.width;
+  const h = canvas.height;
+  const cx = w / 2;
+  const cy = h / 2;
+  const spacing = 50;
+  const noGo = 40; // no-go border thickness in px
+
+  ctx.save();
+
+  // ── No-go border zone (semi-transparent red fill) ──
+  ctx.fillStyle = 'rgba(255, 70, 70, 0.07)';
+  ctx.fillRect(0,         0,          w,     noGo);          // top
+  ctx.fillRect(0,         h - noGo,   w,     noGo);          // bottom
+  ctx.fillRect(0,         noGo,       noGo,  h - noGo * 2);  // left
+  ctx.fillRect(w - noGo,  noGo,       noGo,  h - noGo * 2);  // right
+
+  // ── No-go border dashed outline ──
+  ctx.strokeStyle = 'rgba(255, 70, 70, 0.45)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([5, 5]);
+  ctx.strokeRect(noGo + 0.5, noGo + 0.5, w - noGo * 2 - 1, h - noGo * 2 - 1);
+  ctx.setLineDash([]);
+
+  // ── Grid lines radiating from canvas center ──
+  ctx.strokeStyle = 'rgba(74, 247, 196, 0.10)';
+  ctx.lineWidth = 0.5;
+
+  // Vertical grid lines
+  for (let x = cx % spacing; x <= w; x += spacing) {
+    if (Math.abs(x - cx) < 1) continue; // skip center line (drawn separately)
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+  }
+
+  // Horizontal grid lines
+  for (let y = cy % spacing; y <= h; y += spacing) {
+    if (Math.abs(y - cy) < 1) continue;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+
+  // ── Center crosshair ──
+  ctx.strokeStyle = 'rgba(74, 247, 196, 0.40)';
+  ctx.lineWidth = 1;
+
+  ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke(); // vertical
+  ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.stroke(); // horizontal
+
+  // ── Center dot ──
+  ctx.fillStyle = 'rgba(74, 247, 196, 0.6)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = colors.canvasBg;
@@ -1366,6 +1482,8 @@ function draw() {
   getEyes().forEach(eye => { drawTrail(eye); drawSTI(eye); });
   drawNose();
   if (params.showMouth) drawMouth();
+
+  if (showGrid) drawGrid();
 
   // ── Behavior label ──
   const beh = getBehavior();
