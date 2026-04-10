@@ -75,41 +75,45 @@ The behavior controller is designed for expansion — each behavior is just a co
 
 ### Face Anatomy
 - [x] Eyelids — oval matching eye shape with curved crop; controls for rotation, curvature, translation, color
-- [x] Brows — shape and animation controls
-- [x] Mouth — shape and animation controls
+- [x] Brows — shape, taper (inner/outer ends, round caps), and animation controls
+- [x] Mouth — shape, taper, and animation controls
+- [x] Nose — bridge and nostril shape controls
 - [ ] Phonemes — mouth shapes mapped to phoneme groups (A/E/I/O/U, consonants)
 - [ ] Lip sync — drive phonemes from audio analysis or text-to-speech timing data
 
 ### Visual Feedback
 - [x] Arc trail visualization — line showing recent pupil path, with visibility toggle and memory duration control
 - [x] Saccade target indicator — show where the next gaze point will land before the eye moves there
-- [ ] Bezier arc preview — ghost the full arc path before a saccade executes
+- [x] Planning grid overlay — center crosshair, grid, and no-go border zone for layout reference
 - [x] Anticipation & follow-through — brief wind-up before saccade fires, slight overshoot/settle on landing
+- [ ] Bezier arc preview — ghost the full arc path before a saccade executes
 - [ ] Velocity heatmap — overlay showing dwell density (where the eye spends the most time)
 - [ ] Behavior transition flash — subtle color pulse when behavior switches
 - [ ] Blink countdown indicator — visual cue showing time until next blink (dev tool)
 - [ ] Clipping warning — highlight when pupil travel pushes near the iris edge
 - [ ] FPS counter — frame rate display, useful for hardware porting
 - [ ] Frame timing graph — sparkline of frame render times
-- [ ] Behavior state machine visualization — debug tool to visualize state transitions
-- [ ] Performance profiling mode — debug mode reporting CPU/GPU usage for embedded targeting
 
 ### Expression System
-- [ ] Emotion layer (surprise, disgust, joy) — drives eyelids, brows, mouth together
+- [ ] Emotion layer (surprise, disgust, joy) — drives eyelids, brows, mouth together as named presets
 - [ ] Environmental context awareness — context tags (e.g. "Meeting", "Reading") influence behavior parameters
 
 ### Animation Hierarchy
-- [x] Global face translation — subtle whole-face shift toward the current gaze target, parent transform above gaze direction so the entire rig moves together
+- [x] Global face translation — subtle whole-face shift toward gaze target, parent transform above gaze
+- [x] Motion cascade — layered delays: pupils → face shift → head turn → body shift, each with independent speed and amount
+- [ ] Squash & stretch — eye shape deforms slightly during fast saccades
 
-### 3D & Platform
-- [ ] 3D body — three.js scene using the face as the character's face
-- [ ] WebSocket API — external behavior triggers
+### API & Integration
+- [x] WebSocket API — relay server + browser client; external processes send behavior/param/look/blink/color commands
 - [ ] Raspberry Pi output layer (OLED / servo)
 - [ ] Local LLM integration — inference state drives behavior controller
 - [ ] Object/face tracking — gaze tracks detected faces or objects, overriding random wandering
 - [ ] Head pose integration — pitch/yaw/roll inputs make gaze relative to head orientation
-- [ ] Gaze-based UI interaction — dwell-time selection for UI elements
 - [ ] Gaze vector export — time-stamped gaze vectors exported as CSV/JSON for external analysis
+
+### 3D & Platform
+- [ ] 3D body — three.js scene using the face as the character's face
+- [ ] Gaze-based UI interaction — dwell-time selection for UI elements
 
 -----
 
