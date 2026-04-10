@@ -426,10 +426,6 @@ input[type="checkbox"].grid-cb:checked::after {
       </div>
     </div></div>
   </div>
-  <div class="grid-toggle-row">
-    <input type="checkbox" class="grid-cb" id="grid-toggle" onchange="showGrid = this.checked" />
-    <label for="grid-toggle">Planning Grid</label>
-  </div>
   <div class="log" id="log"></div>
 </div>
 
@@ -518,7 +514,7 @@ input[type="checkbox"].grid-cb:checked::after {
 
   <div class="accordion" id="acc-trail">
     <button class="acc-header" onclick="toggleAcc('acc-trail')">
-      Arc Trail <span class="chevron">▾</span>
+      Overlays <span class="chevron">▾</span>
     </button>
     <div class="acc-body"><div class="acc-inner" id="panel-trail"></div></div>
   </div>
@@ -593,15 +589,15 @@ const params = {
   browThickness:   14,
   browArch:        18,   // arch height in pixels
   browRotation:    0,    // degrees, mirrored like eyes
+  browTaper:       0,    // 0 = uniform, 1 = tapers to points at ends
 
-  // ── Arc Trail ──
+  // ── Overlays ──
   showTrail:       false,
   trailDuration:   3,    // seconds to remember
-
-  // ── Saccade Target Indicator ──
   showSTI:         false,
   stiPersist:      false, // keep target visible between saccades
   stiSize:         8,    // radius in pixels
+  showGrid:        false,
 
   // ── Visibility ──
   showMouth:       true,
@@ -623,6 +619,7 @@ const params = {
   mouthWidth:      120,
   mouthThickness:  10,
   mouthCurve:      0,    // pixels: positive = smile, negative = frown
+  mouthTaper:      0,    // 0 = uniform, 1 = tapers to points at corners
 
   // ── Lids ──
   upperLidPos:     0,    // 0 = fully open, 1 = closed to center
@@ -1352,28 +1349,64 @@ function drawNose() {
   ctx.restore();
 }
 
+// Tapered quadratic bezier — fills a variable-width shape along the curve.
+// taper=0: uniform width; taper=1: tapers to a point at both ends.
+function drawTaperedBezier(p0x, p0y, cpx, cpy, p1x, p1y, thickness, taper, color) {
+  const N = 32;
+  const hw = thickness / 2;
+  const top = [], bot = [];
+
+  for (let i = 0; i <= N; i++) {
+    const t  = i / N;
+    const mt = 1 - t;
+    const bx = mt*mt*p0x + 2*mt*t*cpx + t*t*p1x;
+    const by = mt*mt*p0y + 2*mt*t*cpy + t*t*p1y;
+    let tx = 2*(1-t)*(cpx-p0x) + 2*t*(p1x-cpx);
+    let ty = 2*(1-t)*(cpy-p0y) + 2*t*(p1y-cpy);
+    const tlen = Math.sqrt(tx*tx + ty*ty) || 1;
+    tx /= tlen; ty /= tlen;
+    const nx = -ty, ny = tx;
+    const w  = hw * ((1 - taper) + taper * Math.sin(t * Math.PI));
+    top.push([bx + nx*w, by + ny*w]);
+    bot.push([bx - nx*w, by - ny*w]);
+  }
+
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(top[0][0], top[0][1]);
+  for (let i = 1; i <= N; i++) ctx.lineTo(top[i][0], top[i][1]);
+  for (let i = N; i >= 0; i--) ctx.lineTo(bot[i][0], bot[i][1]);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawMouth() {
   const beh  = getBehavior();
   const mouthReact = params.blinkMouthReact ? params.blinkMouthAmt * state.blinkReact : 0;
   const mx   = params.eyeCenterX;
   const my   = params.eyeCenterY + params.mouthOffsetY - mouthReact;
-  const w    = params.mouthWidth / 2;
+  const hw   = params.mouthWidth / 2;
   const curve = params.mouthCurve + beh.mouthCurve();
 
-  ctx.save();
-  ctx.translate(mx, my);
+  const p0x = mx - hw, p0y = my;
+  const cpx = mx,      cpy = my + curve;
+  const p1x = mx + hw, p1y = my;
 
-  ctx.beginPath();
-  ctx.moveTo(-w, 0);
-  // Control point below = smile, above = frown
-  ctx.quadraticCurveTo(0, curve, w, 0);
-
-  ctx.strokeStyle = colors.mouthColor;
-  ctx.lineWidth   = params.mouthThickness;
-  ctx.lineCap     = 'round';
-  ctx.stroke();
-
-  ctx.restore();
+  if (params.mouthTaper > 0) {
+    drawTaperedBezier(p0x, p0y, cpx, cpy, p1x, p1y, params.mouthThickness, params.mouthTaper, colors.mouthColor);
+  } else {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(p0x, p0y);
+    ctx.quadraticCurveTo(cpx, cpy, p1x, p1y);
+    ctx.strokeStyle = colors.mouthColor;
+    ctx.lineWidth   = params.mouthThickness;
+    ctx.lineCap     = 'round';
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function drawBrow(eye) {
@@ -1386,30 +1419,37 @@ function drawBrow(eye) {
   const width     = params.browWidth;
   const thickness = params.browThickness;
   const arch      = params.browArch + beh.browArch();
-  // Rotation mirrors: left brow negates, right brow follows sign
   const rot       = (params.browRotation + beh.browTilt()) * Math.PI / 180 * sign;
 
-  ctx.save();
-  ctx.translate(bx, cy - offsetY);
-  ctx.rotate(rot);
+  // Transform local brow points to world space for tapered draw
+  const ox = bx, oy = cy - offsetY;
+  const cos = Math.cos(rot), sin = Math.sin(rot);
+  const toWorld = (lx, ly) => [ox + lx*cos - ly*sin, oy + lx*sin + ly*cos];
 
-  ctx.beginPath();
-  ctx.moveTo(-width / 2, 0);
-  ctx.quadraticCurveTo(0, -arch, width / 2, 0);
+  const [p0x, p0y] = toWorld(-width / 2, 0);
+  const [cpx, cpy] = toWorld(0, -arch);
+  const [p1x, p1y] = toWorld(width / 2, 0);
 
-  ctx.strokeStyle = colors.browColor;
-  ctx.lineWidth   = thickness;
-  ctx.lineCap     = 'round';
-  ctx.stroke();
-
-  ctx.restore();
+  if (params.browTaper > 0) {
+    drawTaperedBezier(p0x, p0y, cpx, cpy, p1x, p1y, thickness, params.browTaper, colors.browColor);
+  } else {
+    ctx.save();
+    ctx.translate(ox, oy);
+    ctx.rotate(rot);
+    ctx.beginPath();
+    ctx.moveTo(-width / 2, 0);
+    ctx.quadraticCurveTo(0, -arch, width / 2, 0);
+    ctx.strokeStyle = colors.browColor;
+    ctx.lineWidth   = thickness;
+    ctx.lineCap     = 'round';
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 // ─────────────────────────────────────────────
 //  PLANNING GRID OVERLAY
 // ─────────────────────────────────────────────
-
-let showGrid = false;
 
 function drawGrid() {
   const w = canvas.width;
@@ -1483,7 +1523,7 @@ function draw() {
   drawNose();
   if (params.showMouth) drawMouth();
 
-  if (showGrid) drawGrid();
+  if (params.showGrid) drawGrid();
 
   // ── Behavior label ──
   const beh = getBehavior();
@@ -1744,6 +1784,7 @@ function buildControlPanels() {
       ['mouthWidth',     'Width',     10,  400,  1,   0],
       ['mouthThickness', 'Thickness',  2,   40,  1,   0],
       ['mouthCurve',     'Curve',    -60,   60,  1,   0],
+      ['mouthTaper',     'Taper',      0,    1,  0.01, 2],
     ],
     'panel-brow': [
       ['showBrows',     'Visible',   'bool'],
@@ -1752,6 +1793,7 @@ function buildControlPanels() {
       ['browThickness', 'Thickness',  2,   40,  1,   0],
       ['browArch',      'Arch',     -30,   80,  1,   0],
       ['browRotation',  'Rotation', -45,   45,  0.5, 1],
+      ['browTaper',     'Taper',      0,    1,  0.01, 2],
     ],
     'panel-lids': [
       ['showLids',     'Visible',    'bool'],
@@ -1796,11 +1838,12 @@ function buildControlPanels() {
       ['blinkReactDamp',  '↳ Damping',            1,    20,   0.5,  1, true],
     ],
     'panel-trail': [
-      ['showTrail',      'Trail visible',  'bool'],
-      ['trailDuration',  'Duration',       0.5,  10,  0.5,  1],
-      ['showSTI',        'STI visible',    'bool'],
-      ['stiPersist',     'STI persist',    'bool'],
-      ['stiSize',        'STI size',       3,    30,  1,    0],
+      ['showGrid',       'Planning grid',  'bool'],
+      ['showTrail',      'Arc trail',      'bool'],
+      ['trailDuration',  'Trail duration', 0.5,  10,  0.5,  1],
+      ['showSTI',        'Target marker',  'bool'],
+      ['stiPersist',     'Marker persist', 'bool'],
+      ['stiSize',        'Marker size',    3,    30,  1,    0],
     ],
   };
 
