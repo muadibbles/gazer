@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GAZER v0.06</title>
+  <title>GAZER v0.07</title>
   <script type="importmap">
   {
     "imports": {
@@ -567,7 +567,7 @@ input[type="checkbox"].grid-cb:checked::after {
 
 <header>
   <h1><span class="status-dot"></span>Gazer</h1>
-  <span>v0.06 — robot eye behavior system</span>
+  <span>v0.07 — robot eye behavior system</span>
 </header>
 
 <div class="left-panel">
@@ -904,6 +904,10 @@ input[type="checkbox"].grid-cb:checked::after {
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
+// ── Personal time grid dimensions ──
+const PT_COLS = 9;
+const PT_ROWS = 6;
+
 // ── Parameters (all tweakable) ──
 const params = {
   // ── Eye Shape ──
@@ -1044,6 +1048,14 @@ const params = {
   driveNoveltyDecay: 0.20,  // pressure/s lost by the currently active state
   driveRiseRate:     0.80,  // rate at which pressure rises toward profile target
   driveHysteresis:   0.10,  // margin over current state required to trigger a switch
+
+  // ── Personal time (spatial memory) ──
+  ptEnabled:         true,   // bias saccades toward unvisited regions
+  ptStrength:        2.0,    // exponent — higher = stronger novelty preference
+  ptDecay:           0.03,   // familiarity lost per second (forgetting)
+  ptAccum:           0.50,   // familiarity gained per second while dwelling
+  ptSamples:         10,     // candidates sampled per saccade decision
+  showPersonalTime:  false,  // heatmap overlay
 
   // ── 12 Principles master switch ──
   principlesEnabled: true,  // false = mechanical baseline (no arcs, easing, squash, cascade, overshoot)
@@ -1198,6 +1210,9 @@ const state = {
   squashAmt:   0,   // current deformation (+ = stretch along travel, - = squash)
   squashVel:   0,   // spring velocity for landing squash return
   squashAngle: 0,   // angle of stretch axis (radians, in canvas space)
+
+  // Personal time — spatial memory (9×6 familiarity grid in normalised gaze space)
+  pt: null,   // Float32Array(54), lazy-initialised on first use
 };
 
 let lastTime = null;
@@ -1634,11 +1649,86 @@ function triggerSaccade(targetX, targetY) {
   logEvent(`saccade → (${targetX.toFixed(2)}, ${targetY.toFixed(2)})`);
 }
 
+// ─────────────────────────────────────────────
+//  PERSONAL TIME — spatial memory
+// ─────────────────────────────────────────────
+
+// Return familiarity value for normalised gaze coords (-1..1)
+function ptCellAt(x, y) {
+  if (!state.pt) return 0;
+  const col = Math.floor((x * 0.5 + 0.5) * PT_COLS);
+  const row = Math.floor((y * 0.5 + 0.5) * PT_ROWS);
+  const c = Math.max(0, Math.min(PT_COLS - 1, col));
+  const r = Math.max(0, Math.min(PT_ROWS - 1, row));
+  return state.pt[r * PT_COLS + c];
+}
+
+function ptAccumAt(x, y, amount) {
+  if (!state.pt) return;
+  const col = Math.floor((x * 0.5 + 0.5) * PT_COLS);
+  const row = Math.floor((y * 0.5 + 0.5) * PT_ROWS);
+  const c = Math.max(0, Math.min(PT_COLS - 1, col));
+  const r = Math.max(0, Math.min(PT_ROWS - 1, row));
+  const i = r * PT_COLS + c;
+  state.pt[i] = Math.min(1, state.pt[i] + amount);
+}
+
+function updatePersonalTime(dt) {
+  // Lazy init
+  if (!state.pt) state.pt = new Float32Array(PT_COLS * PT_ROWS);
+
+  const grid = state.pt;
+  // Decay all cells toward 0 (forgetting)
+  const decayAmt = params.ptDecay * dt;
+  for (let i = 0; i < grid.length; i++) {
+    grid[i] = Math.max(0, grid[i] - decayAmt);
+  }
+
+  // Accumulate familiarity at current gaze position while dwelling (not mid-saccade)
+  if (!state.arc.active) {
+    ptAccumAt(state.gazeX, state.gazeY, params.ptAccum * dt);
+  }
+}
+
 function randomSaccade() {
   const beh = getBehavior();
   const r = beh.gazeRadius;
   const jitter = params.saccadeJitter;
 
+  if (params.ptEnabled && state.pt) {
+    // Sample N candidates, weight each by novelty (1 - familiarity)^strength
+    const n = params.ptSamples;
+    let candidates = [];
+    for (let i = 0; i < n; i++) {
+      const tx = (Math.random() * 2 - 1) * r * params.gazeRangeX + (Math.random() * 2 - 1) * jitter * 0.1;
+      const ty = (Math.random() * 2 - 1) * r * params.gazeRangeY + (Math.random() * 2 - 1) * jitter * 0.1;
+      const fam = ptCellAt(tx, ty);
+      const w = Math.pow(Math.max(0.01, 1 - fam), params.ptStrength);
+      candidates.push({ tx, ty, w });
+    }
+    // Weighted random pick
+    const total = candidates.reduce((s, c) => s + c.w, 0);
+    let pick = Math.random() * total;
+    for (const c of candidates) {
+      pick -= c.w;
+      if (pick <= 0) {
+        triggerSaccade(
+          Math.max(-0.9, Math.min(0.9, c.tx)),
+          Math.max(-0.9, Math.min(0.9, c.ty))
+        );
+        return;
+      }
+    }
+    // Fallback to last candidate
+    const last = candidates[candidates.length - 1];
+    triggerSaccade(
+      Math.max(-0.9, Math.min(0.9, last.tx)),
+      Math.max(-0.9, Math.min(0.9, last.ty))
+    );
+    return;
+  }
+
+  // PT disabled — pure random
   const tx = (Math.random() * 2 - 1) * r * params.gazeRangeX + (Math.random() * 2 - 1) * jitter * 0.1;
   const ty = (Math.random() * 2 - 1) * r * params.gazeRangeY + (Math.random() * 2 - 1) * jitter * 0.1;
 
@@ -1646,6 +1736,45 @@ function randomSaccade() {
     Math.max(-0.9, Math.min(0.9, tx)),
     Math.max(-0.9, Math.min(0.9, ty))
   );
+}
+
+function drawPersonalTime(eye) {
+  if (!params.showPersonalTime || !state.pt) return;
+  const { cx, cy, rx, ry, rot, sign } = eye;
+  const beh = getBehavior();
+  const openness  = beh.lidOpenness() * (1 - state.blink.t);
+  const displayRy = ry * openness;
+  if (displayRy < 0.5) return;
+
+  const travel = params.pupilTravel;
+  const cos = Math.cos(rot), sin = Math.sin(rot);
+
+  // Draw each grid cell as a coloured rectangle in gaze space
+  for (let row = 0; row < PT_ROWS; row++) {
+    for (let col = 0; col < PT_COLS; col++) {
+      const fam = state.pt[row * PT_COLS + col];
+      if (fam < 0.01) continue;
+
+      // Centre of cell in normalised gaze coords
+      const nx = ((col + 0.5) / PT_COLS) * 2 - 1;
+      const ny = ((row + 0.5) / PT_ROWS) * 2 - 1;
+
+      // Convert to canvas pixels (same transform as pupil / trail)
+      const lx = (nx + params.pupilBiasX + params.pupilSpacing * sign) * rx * travel;
+      const ly = (ny + params.pupilBiasY) * displayRy * travel;
+      const px = cx + lx * cos - ly * sin;
+      const py = cy + lx * sin + ly * cos;
+
+      // Cell half-size in canvas space (approx — ignores rotation)
+      const hw = (rx * travel * 2) / PT_COLS * 0.45;
+      const hh = (displayRy * travel * 2) / PT_ROWS * 0.45;
+
+      // Warm colour: low fam → cyan tint, high fam → amber (visited = warm)
+      const alpha = fam * 0.55;
+      ctx.fillStyle = `rgba(255, 160, 60, ${alpha})`;
+      ctx.fillRect(px - hw, py - hh, hw * 2, hh * 2);
+    }
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -1921,6 +2050,7 @@ function update(dt) {
   }
 
   updateDrive(dt);
+  updatePersonalTime(dt);
   updateBlink(dt);
 
   // Smooth blink reaction for brow/mouth follow
@@ -2443,7 +2573,7 @@ function draw() {
     if (hasDeform) ctx.restore();
     if (params.showBrows) drawBrow(eye);
   });
-  getEyes().forEach(eye => { drawTrail(eye); drawSTI(eye); });
+  getEyes().forEach(eye => { drawPersonalTime(eye); drawTrail(eye); drawSTI(eye); });
   drawNose();
   if (params.showMouth) drawMouth();
 
@@ -3140,17 +3270,23 @@ function buildControlPanels() {
       ['blinkReactDamp',  '↳ Damping',            1,    20,   0.5,  1, true],
     ],
     'panel-trail': [
-      ['showGrid',       'Planning grid',  'bool'],
-      ['showTrail',      'Arc trail',      'bool'],
-      ['trailDuration',  'Trail duration', 0.5,  10,  0.5,  1],
-      ['showSTI',        'Target marker',  'bool'],
-      ['stiPersist',     'Marker persist', 'bool'],
-      ['stiSize',        'Marker size',    3,    30,  1,    0],
+      ['showGrid',          'Planning grid',  'bool'],
+      ['showTrail',         'Arc trail',      'bool'],
+      ['trailDuration',     'Trail duration', 0.5,  10,  0.5,  1],
+      ['showSTI',           'Target marker',  'bool'],
+      ['stiPersist',        'Marker persist', 'bool'],
+      ['stiSize',           'Marker size',    3,    30,  1,    0],
+      ['showPersonalTime',  'Personal time',  'bool'],
     ],
     'drive-sliders': [
       ['driveNoveltyDecay', 'Novelty decay',  0.01, 0.8,  0.01, 2],
       ['driveRiseRate',     'Rise rate',      0.1,  3.0,  0.05, 2],
       ['driveHysteresis',   'Hysteresis',     0.0,  0.5,  0.01, 2],
+      ['ptEnabled',         'Personal time',  'bool'],
+      ['ptStrength',        '↳ Novelty bias', 0.5,  5.0,  0.1,  1, true],
+      ['ptDecay',           '↳ Decay rate',   0.0,  0.3,  0.005,3, true],
+      ['ptAccum',           '↳ Accum rate',   0.1,  2.0,  0.05, 2, true],
+      ['ptSamples',         '↳ Candidates',   3,    20,   1,    0, true],
     ],
   };
 
