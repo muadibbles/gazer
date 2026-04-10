@@ -84,7 +84,7 @@ The enforcer doesn't block transitions — it reroutes them. If the drive system
 What the robot wants when no external stimulus is present. This is the autonomous floor — the idle personality that runs when nothing is happening.
 
 The drive layer is not random. It's shaped by:
-- **Default pressure profile** — each state has a resting pressure that defines the robot's baseline temperament. A robot with high resting `curious` pressure will wander and scan. One with high resting `attentive` pressure will stay focused on center.
+- **Default pressure profile** — `driveProfile` maps state names to resting pressure targets. Currently only `idle` (0.40) and `curious` (0.25) have non-zero baseline pull; the other 13 states default to 0 and only become active in response to external stimulus via the rule engine or direct `addPressure()` calls. This gives the robot an autonomous idle/curious oscillation while keeping all other states purely reactive. The profile can be extended to give any state a baseline: a robot with high resting `attentive` will stay focused on center; high resting `curious` will wander and scan.
 - **Time-of-session effects** — pressure profiles can shift over a session. Early: higher `attentive`. Late: higher `sleepy`.
 - **Personal time** — see below.
 

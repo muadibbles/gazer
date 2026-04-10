@@ -11,7 +11,7 @@ The fastest way to verify everything is working. Open `index.html` in a browser 
 ### Compositor & behaviors
 
 1. Open the **Compositor** accordion → **GAZE** tab
-2. Click each of the 15 behavior buttons — verify:
+2. Click each of the 17 behavior buttons — verify:
    - Active button highlights (teal)
    - Status bar updates (G: STATE)
    - Transition progress bar fills and fades
@@ -170,7 +170,7 @@ The compositor, drive system, state machine, and transition enforcer are pure JS
 tests/
   unit/
     compositor.test.js     — getCompositor(), _resolveTransition()
-    behaviors.test.js      — all 15 behaviors well-formed
+    behaviors.test.js      — all 17 behaviors well-formed
     drive.test.js          — pressure dynamics, enforceTransition()
     transitions.test.js    — transTable, transEnforcer
   integration/
@@ -233,8 +233,8 @@ describe('behaviors', () => {
     });
   });
 
-  test('all 15 behaviors present', () => {
-    expect(Object.keys(behaviors)).toHaveLength(15);
+  test('all 17 behaviors present', () => {
+    expect(Object.keys(behaviors)).toHaveLength(17);
   });
 
   test('interrupted has maxHold', () => {
@@ -399,7 +399,7 @@ async def test_all_behaviors_accepted():
 | Area | Manual | Unit test | Browser test | WS test |
 |------|--------|-----------|--------------|---------|
 | Compositor blending | ✓ | high | medium | low |
-| All 15 behaviors complete | ✓ | high | low | low |
+| All 17 behaviors complete | ✓ | high | low | low |
 | Transition enforcer | ✓ | high | medium | low |
 | Drive pressure dynamics | ✓ | high | medium | low |
 | Micro-expressions | ✓ | low | high | medium |

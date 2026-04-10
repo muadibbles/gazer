@@ -59,7 +59,9 @@ Some state pairs have a custom blend duration that overrides both the destinatio
 | `pleased → uncomfortable` | 0.90s | reluctant, slow shift |
 | `uncomfortable → pleased` | 0.55s | cautious brightening |
 | `resting → interrupted` | 0.08s | groggy startle |
+| `waking → interrupted` | 0.08s | still-groggy startle |
 | `resting → alert` | 0.25s | slow state takes a breath first |
+| `resting → attentive` | 0.35s | slow rise to attention |
 
 ---
 

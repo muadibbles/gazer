@@ -21,7 +21,7 @@ An exploration of the 12 principles of animation applied to robotics — using a
 
 ## Behaviors
 
-15 behaviors across five groups: Classic, Attention, Conversational, Affective, and Operational. Each defines gaze parameters (range, speed, easing) and expression parameters (lids, brows, mouth, blink rate) — any behavior can be used as a template for either compositor layer independently.
+17 behaviors across five groups: Classic, Attention, Conversational, Affective, and Operational. Each defines gaze parameters (range, speed, easing) and expression parameters (lids, brows, mouth, blink rate) — any behavior can be used as a template for either compositor layer independently.
 
 See [docs/behaviors.md](docs/behaviors.md) for the full reference, pair-specific transition overrides, and notes on combining layers.
 

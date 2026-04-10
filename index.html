@@ -1535,8 +1535,6 @@ function getCompositor() {
   const aff    = behaviors[state.affect]         || behaviors.idle;
   const oldAtt = behaviors[state.transOldAttn]   || att;
   const oldAff = behaviors[state.transOldAffect] || aff;
-  const t      = state.transBlend;
-
   // Apply per-transition easing to the raw blend progress
   const t = state.transEaseFn ? state.transEaseFn(state.transBlend) : state.transBlend;
 
