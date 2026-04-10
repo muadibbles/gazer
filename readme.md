@@ -78,6 +78,7 @@ The behavior controller is designed for expansion — each behavior is just a co
 - [x] Brows — shape, taper (inner/outer ends, round caps), and animation controls
 - [x] Mouth — shape, taper, and animation controls
 - [x] Nose — bridge and nostril shape controls
+- [ ] Better blink mechanics — multi-stage lid travel, asymmetric open/close timing, hold at closed
 - [ ] Phonemes — mouth shapes mapped to phoneme groups (A/E/I/O/U, consonants)
 - [ ] Lip sync — drive phonemes from audio analysis or text-to-speech timing data
 
@@ -101,7 +102,7 @@ The behavior controller is designed for expansion — each behavior is just a co
 ### Animation Hierarchy
 - [x] Global face translation — subtle whole-face shift toward gaze target, parent transform above gaze
 - [x] Motion cascade — layered delays: pupils → face shift → head turn → body shift, each with independent speed and amount
-- [ ] Squash & stretch — eye shape deforms slightly during fast saccades
+- [x] Squash & stretch — eye shape deforms slightly during fast saccades
 
 ### API & Integration
 - [x] WebSocket API — relay server + browser client; external processes send behavior/param/look/blink/color commands

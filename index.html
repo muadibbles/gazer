@@ -701,9 +701,11 @@ const params = {
   headTurnAmt:        0,   // px head shifts in 2D (slower, larger range)
   headTurnSpeed:      0.6, // lerp speed
   headRotationMax:    25,  // degrees — max 3D head yaw
+  head3DSpeed:        0.04, // lerp speed for 3D head yaw/pitch (independent of 2D cascade)
   bodyShiftAmt:       0,   // px body shifts in 2D (slowest)
   bodyShiftSpeed:     0.3, // lerp speed
   bodyRotationMax:    10,  // degrees — max 3D body yaw
+  body3DSpeed:        0.02, // lerp speed for 3D body yaw
 
   // ── Anticipation (saccade) ──
   anticipationAmt: 0,     // 0 = off; 0.1–0.4 = wind-up distance (ratio of saccade dist)
@@ -713,6 +715,9 @@ const params = {
   overshootAmt:    0,     // 0 = off; 0.1–0.4 = overshoot distance (ratio of saccade dist)
   overshootDamp:   10,    // spring damping  — higher = less oscillation
   overshootStiff:  140,   // spring stiffness — higher = snappier return
+
+  // ── Squash & stretch ──
+  squashStretch:   0.25,  // max deformation (0 = off)
 
   // ── Blink facial reactions ──
   blinkBrowReact:  false,
@@ -848,6 +853,11 @@ const state = {
   head3DYaw:   0,   // degrees, positive = right
   head3DPitch: 0,   // degrees, positive = down
   body3DYaw:   0,   // degrees, positive = right
+
+  // Squash & stretch
+  squashAmt:   0,   // current deformation (+ = stretch along travel, - = squash)
+  squashVel:   0,   // spring velocity for landing squash return
+  squashAngle: 0,   // angle of stretch axis (radians, in canvas space)
 };
 
 let lastTime = null;
@@ -1119,6 +1129,8 @@ function update(dt) {
     if (arc.t >= 1) {
       state.gazeX = arc.endX;
       state.gazeY = arc.endY;
+      // Landing squash impulse — spring will decay it back to 0
+      if (params.squashStretch > 0) state.squashVel = -params.squashStretch * 2.5;
       if (params.overshootAmt > 0) {
         // Project gaze past target and let spring pull it back
         const dx   = arc.endX - arc.startX;
@@ -1189,9 +1201,29 @@ function update(dt) {
   state.bodyY = lerp(state.bodyY, state.gazeY * params.bodyShiftAmt,     params.bodyShiftSpeed);
 
   // 3D rotation (drives Three.js scene via window.three)
-  state.head3DYaw   = lerp(state.head3DYaw,   state.gazeX *  params.headRotationMax,        params.headTurnSpeed);
-  state.head3DPitch = lerp(state.head3DPitch,  state.gazeY *  params.headRotationMax * 0.35, params.headTurnSpeed);
-  state.body3DYaw   = lerp(state.body3DYaw,    state.gazeX *  params.bodyRotationMax,        params.bodyShiftSpeed);
+  state.head3DYaw   = lerp(state.head3DYaw,   state.gazeX *  params.headRotationMax,        params.head3DSpeed);
+  state.head3DPitch = lerp(state.head3DPitch,  state.gazeY *  params.headRotationMax * 0.35, params.head3DSpeed);
+  state.body3DYaw   = lerp(state.body3DYaw,    state.gazeX *  params.bodyRotationMax,        params.body3DSpeed);
+
+  // ── Squash & stretch ──
+  if (params.squashStretch > 0) {
+    const arc = state.arc;
+    if (arc.active && arc.phase === 'main') {
+      const dx = arc.endX - arc.startX;
+      const dy = arc.endY - arc.startY;
+      if (dx !== 0 || dy !== 0) state.squashAngle = Math.atan2(dy, dx);
+      const target = params.squashStretch * Math.sin(arc.t * Math.PI);
+      state.squashAmt += (target - state.squashAmt) * Math.min(1, dt * 16);
+      state.squashVel = 0;
+    } else {
+      // Spring return to 0 — also absorbs the landing squash impulse
+      state.squashVel += (-150 * state.squashAmt - 12 * state.squashVel) * dt;
+      state.squashAmt += state.squashVel * dt;
+      if (Math.abs(state.squashAmt) < 0.0005 && Math.abs(state.squashVel) < 0.001) {
+        state.squashAmt = 0; state.squashVel = 0;
+      }
+    }
+  }
 
   updateBlink(dt);
 
@@ -1307,6 +1339,18 @@ function drawEye(eye) {
   const displayRy = ry * openness;
   if (displayRy < 0.5) return;
 
+  // Squash & stretch — world-space deform around eye center
+  const ss = state.squashAmt;
+  const hasDeform = params.squashStretch > 0 && Math.abs(ss) > 0.001;
+  if (hasDeform) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(state.squashAngle);
+    ctx.scale(1 + ss, 1 / (1 + Math.abs(ss)));
+    ctx.rotate(-state.squashAngle);
+    ctx.translate(-cx, -cy);
+  }
+
   // Gaze offset in eye-local space, then rotate into canvas space
   const travel = params.pupilTravel;
   const localDx = (state.gazeX + params.pupilBiasX + params.pupilSpacing * sign) * rx * travel;
@@ -1345,6 +1389,7 @@ function drawEye(eye) {
   }
 
   ctx.restore();
+  if (hasDeform) ctx.restore();
 }
 
 function drawLids(eye) {
@@ -1954,10 +1999,12 @@ function buildControlPanels() {
       ['faceTranslateSpeed','↳ Speed',       0.2,  8,  0.1,  1, true],
       ['headTurnAmt',       'Head turn',      0,   80,  1,    0],
       ['headTurnSpeed',     '↳ Speed',        0.1,  4,  0.1,  1, true],
-      ['headRotationMax',   '↳ 3D yaw (°)',   0,   45,  1,    0, true],
-      ['bodyShiftAmt',      'Body shift',     0,  100,  1,    0],
-      ['bodyShiftSpeed',    '↳ Speed',        0.05, 2,  0.05, 2, true],
-      ['bodyRotationMax',   '↳ 3D yaw (°)',   0,   30,  1,    0, true],
+      ['headRotationMax',   '↳ 3D yaw (°)',   0,   45,   1,     0,    true],
+      ['head3DSpeed',       '↳ 3D settle',   0.005,0.3,  0.005, 3,    true],
+      ['bodyShiftAmt',      'Body shift',     0,  100,   1,     0],
+      ['bodyShiftSpeed',    '↳ Speed',        0.05, 2,   0.05,  2,    true],
+      ['bodyRotationMax',   '↳ 3D yaw (°)',   0,   30,   1,     0,    true],
+      ['body3DSpeed',       '↳ 3D settle',   0.005,0.2,  0.005, 3,    true],
     ],
     'panel-anim': [
       ['anticipationAmt', 'Saccade anticipation', 0,    0.5,  0.01, 2],
@@ -1965,6 +2012,7 @@ function buildControlPanels() {
       ['overshootAmt',    'Saccade overshoot',    0,    0.5,  0.01, 2],
       ['overshootDamp',   '↳ Damping',            1,    30,   0.5,  1, true],
       ['overshootStiff',  '↳ Stiffness',          20,   400,  5,    0, true],
+      ['squashStretch',   'Squash & stretch',     0,    0.6,  0.01, 2],
       ['blinkAntAmt',     'Blink anticipation',   0,    0.3,  0.01, 2],
       ['blinkAntDur',     '↳ Duration',           0.02, 0.2,  0.01, 2, true],
       ['blinkOvAmt',      'Blink overshoot',      0,    0.3,  0.01, 2],
