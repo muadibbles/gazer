@@ -756,8 +756,12 @@ const params = {
   bodyShiftAmt:       0,   // px body shifts in 2D (slowest)
   bodyShiftSpeed:     0.3, // lerp speed
   bodyRotationMax:    10,  // degrees — max 3D body yaw
-  body3DSpeed:        0.02, // lerp speed for 3D body yaw
+  body3DSpeed:        0.02, // spring stiffness scale for 3D body yaw
   ballTrackTimeout:   3,   // seconds before reverting to idle wander after drag ends
+  headSpringDamp:     14,  // head rotation spring damping (higher = less overshoot)
+  bodySpringDamp:     12,  // body rotation spring damping
+  headArcFactor:      0.12, // head tilt per (deg/s) yaw velocity — arc in turns
+  bodyArcFactor:      0.08, // body lean per (deg/s) rotation — arc in turns
 
   // ── Anticipation (saccade) ──
   anticipationAmt: 0,     // 0 = off; 0.1–0.4 = wind-up distance (ratio of saccade dist)
@@ -902,10 +906,15 @@ const state = {
   bodyX: 0, bodyY: 0,
 
   // 3D rotation state (drives Three.js head/body)
-  head3DYaw:   0,   // degrees, positive = right
-  head3DPitch: 0,   // degrees, positive = down
-  body3DYaw:          0,   // degrees, positive = right
-  gazeTargetActive:   false, // true while ball drag overrides body rotation
+  head3DYaw:      0,  // degrees, positive = right
+  head3DPitch:    0,  // degrees, positive = down
+  body3DYaw:      0,  // degrees, positive = right
+  head3DYawVel:   0,  // deg/s — spring velocity
+  head3DPitchVel: 0,
+  body3DYawVel:   0,
+  head3DRoll:     0,  // deg — tilt from arc motion during turns
+  bodyPitchArc:   0,  // deg — lean from arc motion during body rotation
+  gazeTargetActive: false, // true while ball drag overrides body rotation
 
   // Squash & stretch
   squashAmt:   0,   // current deformation (+ = stretch along travel, - = squash)
@@ -1454,10 +1463,28 @@ function update(dt) {
   state.bodyY = lerp(state.bodyY, state.gazeY * params.bodyShiftAmt,     params.bodyShiftSpeed);
 
   // 3D rotation — bypassed when Three.js tracking is active
+  // Spring physics (Principles 5 + 6): natural ease-in/out + follow-through overshoot
   if (!state.gazeTargetActive) {
-    state.head3DYaw   = lerp(state.head3DYaw,   state.gazeX *  params.headRotationMax,        params.head3DSpeed);
-    state.head3DPitch = lerp(state.head3DPitch,  state.gazeY *  params.headRotationMax * 0.35, params.head3DSpeed);
-    state.body3DYaw   = lerp(state.body3DYaw,    state.gazeX *  params.bodyRotationMax,        params.body3DSpeed);
+    const headStiff = params.head3DSpeed * 200;
+    const headDamp  = 2 * Math.sqrt(headStiff) * 0.7;   // ~70% critical — slight overshoot
+    const bodyStiff = params.body3DSpeed * 200;
+    const bodyDamp  = 2 * Math.sqrt(bodyStiff) * 0.7;
+
+    const headYawAcc    = headStiff * (state.gazeX * params.headRotationMax - state.head3DYaw) - headDamp * state.head3DYawVel;
+    state.head3DYawVel += headYawAcc * dt;
+    state.head3DYaw    += state.head3DYawVel * dt;
+
+    const headPitchAcc    = headStiff * (state.gazeY * params.headRotationMax * 0.35 - state.head3DPitch) - headDamp * state.head3DPitchVel;
+    state.head3DPitchVel += headPitchAcc * dt;
+    state.head3DPitch    += state.head3DPitchVel * dt;
+
+    const bodyYawAcc    = bodyStiff * (state.gazeX * params.bodyRotationMax - state.body3DYaw) - bodyDamp * state.body3DYawVel;
+    state.body3DYawVel += bodyYawAcc * dt;
+    state.body3DYaw    += state.body3DYawVel * dt;
+
+    // Arc motion (Principle 7): head tilts + body leans into turns
+    state.head3DRoll   = Math.max(-20, Math.min(20, -state.head3DYawVel * params.headArcFactor));
+    state.bodyPitchArc = Math.max(-10, Math.min(10, -state.body3DYawVel * params.bodyArcFactor));
   }
 
   // ── Squash & stretch ──
@@ -2263,6 +2290,10 @@ function buildControlPanels() {
       ['bodyShiftSpeed',    '↳ Speed',        0.05, 2,   0.05,  2,    true],
       ['bodyRotationMax',   '↳ 3D yaw (°)',   0,   30,   1,     0,    true],
       ['body3DSpeed',       '↳ 3D settle',   0.005,0.2,  0.005, 3,    true],
+      ['headSpringDamp',    '↳ Head damp',   2,   30,   0.5,   1,    true],
+      ['bodySpringDamp',    '↳ Body damp',   2,   30,   0.5,   1,    true],
+      ['headArcFactor',     'Head arc tilt', 0,   0.5,  0.01,  2],
+      ['bodyArcFactor',     '↳ Body lean',   0,   0.3,  0.01,  2,    true],
     ],
     'panel-anim': [
       ['anticipationAmt', 'Saccade anticipation', 0,    0.5,  0.01, 2],
@@ -2687,37 +2718,52 @@ function preUpdate(dt) {
 
   const HEAD_SHARE   = 0.75;
   const EYE_NORM_DEG = 15; // 25% of 60° total range → ±1 gazeX/Y
-  const headSpeed    = p.head3DSpeed * 80;
+  const headStiff    = p.head3DSpeed * 4000;
+  const headDamp     = p.headSpringDamp;
+  const bodyStiff    = p.body3DSpeed * 3000;
+  const bodyDamp     = p.bodySpringDamp;
   const maxHead      = p.headRotationMax;
 
-  // ── Yaw: head takes 75%, eyes cover the remaining 25% ──
+  // ── Yaw: head spring toward 75% of target, eyes cover the remaining 25% ──
   const targetYawDeg  = Math.atan2(ball.position.x, ball.position.z) * 180 / Math.PI;
   const relYawDeg     = targetYawDeg - s.body3DYaw;
   const headYawTarget = Math.max(-maxHead, Math.min(maxHead, relYawDeg * HEAD_SHARE));
-  s.head3DYaw        += (headYawTarget - s.head3DYaw) * Math.min(1, dt * headSpeed);
+  const headYawAcc    = headStiff * (headYawTarget - s.head3DYaw) - headDamp * s.head3DYawVel;
+  s.head3DYawVel     += headYawAcc * dt;
+  s.head3DYaw        += s.head3DYawVel * dt;
   const remainingYaw  = relYawDeg - s.head3DYaw;
   const gazeXTarget   = Math.max(-1, Math.min(1, remainingYaw / EYE_NORM_DEG));
 
-  // ── Pitch: head takes 75%, eyes cover the remaining 25% ──
+  // ── Pitch: head spring, eyes cover remainder ──
   headGroup.getWorldPosition(_headWorld);
   _ballDir.subVectors(ball.position, _headWorld);
-  const dist2D         = Math.sqrt(_ballDir.x * _ballDir.x + _ballDir.z * _ballDir.z);
-  const totalPitchDeg  = -Math.atan2(_ballDir.y, dist2D) * 180 / Math.PI;
+  const dist2D          = Math.sqrt(_ballDir.x * _ballDir.x + _ballDir.z * _ballDir.z);
+  const totalPitchDeg   = -Math.atan2(_ballDir.y, dist2D) * 180 / Math.PI;
   const headPitchTarget = totalPitchDeg * HEAD_SHARE;
-  s.head3DPitch        += (headPitchTarget - s.head3DPitch) * Math.min(1, dt * headSpeed);
+  const headPitchAcc    = headStiff * (headPitchTarget - s.head3DPitch) - headDamp * s.head3DPitchVel;
+  s.head3DPitchVel     += headPitchAcc * dt;
+  s.head3DPitch        += s.head3DPitchVel * dt;
   const remainingPitch  = totalPitchDeg - s.head3DPitch;
   const gazeYTarget     = Math.max(-1, Math.min(1, remainingPitch / EYE_NORM_DEG));
 
-  // ── Body follows when head yaw exceeds 60% of its range ──
-  const bodySpeed = p.body3DSpeed * 80;
-  const deadband  = maxHead * 0.6;
+  // ── Body spring: kicks in when head yaw exceeds 60% of range ──
+  const deadband = maxHead * 0.6;
   if (Math.abs(s.head3DYaw) > deadband) {
-    const excess  = s.head3DYaw - Math.sign(s.head3DYaw) * deadband;
-    s.body3DYaw  += excess * Math.min(1, dt * bodySpeed);
+    const excess   = s.head3DYaw - Math.sign(s.head3DYaw) * deadband;
+    const bodyAcc  = bodyStiff * excess - bodyDamp * s.body3DYawVel;
+    s.body3DYawVel += bodyAcc * dt;
+  } else {
+    // Decay body velocity smoothly once head returns to range
+    s.body3DYawVel *= Math.max(0, 1 - bodyDamp * 3 * dt);
   }
+  s.body3DYaw += s.body3DYawVel * dt;
+
+  // ── Arc motion (Principle 7): head tilts + body leans into turns ──
+  s.head3DRoll   = Math.max(-20, Math.min(20, -s.head3DYawVel * p.headArcFactor));
+  s.bodyPitchArc = Math.max(-10, Math.min(10, -s.body3DYawVel * p.bodyArcFactor));
 
   // ── Drive pupils toward the 25% remainder ──
-  const eyeT = Math.min(1, dt * headSpeed);
+  const eyeT = Math.min(1, dt * p.head3DSpeed * 80);
   s.gazeX   += (gazeXTarget - s.gazeX) * eyeT;
   s.gazeY   += (gazeYTarget - s.gazeY) * eyeT;
   s.arc.active    = false;
@@ -2732,9 +2778,11 @@ function render() {
   const s = window.state;
   const p = window.params;
   if (s && p) {
-    headGroup.rotation.y =  s.head3DYaw   * Math.PI / 180;
-    headGroup.rotation.x =  s.head3DPitch * Math.PI / 180;
-    robot.rotation.y     =  s.body3DYaw   * Math.PI / 180;
+    headGroup.rotation.y =  s.head3DYaw           * Math.PI / 180;
+    headGroup.rotation.x =  s.head3DPitch         * Math.PI / 180;
+    headGroup.rotation.z = (s.head3DRoll   || 0)  * Math.PI / 180; // arc tilt into turn
+    robot.rotation.y     =  s.body3DYaw           * Math.PI / 180;
+    robot.rotation.x     = (s.bodyPitchArc || 0)  * Math.PI / 180; // arc lean into turn
     applyColors();
     renderer.setClearColor(new THREE.Color(window.colors?.stageBg ?? '#0a0a0f'));
   }
