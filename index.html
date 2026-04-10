@@ -363,16 +363,7 @@ textarea.json-area {
 </header>
 
 <div class="left-panel">
-  <div class="log" id="log"></div>
-</div>
-
-<div class="stage">
-  <canvas id="canvas" width="600" height="600"></canvas>
-</div>
-
-<div class="panel">
-
-  <div class="accordion open" id="acc-ws">
+  <div class="accordion" id="acc-ws">
     <button class="acc-header" onclick="toggleAcc('acc-ws')">
       WebSocket API <span class="chevron">▾</span>
     </button>
@@ -391,8 +382,16 @@ textarea.json-area {
       </div>
     </div></div>
   </div>
+  <div class="log" id="log"></div>
+</div>
 
-  <div class="accordion open" id="acc-behavior">
+<div class="stage">
+  <canvas id="canvas" width="600" height="600"></canvas>
+</div>
+
+<div class="panel">
+
+  <div class="accordion" id="acc-behavior">
     <button class="acc-header" onclick="toggleAcc('acc-behavior')">
       Behavior <span class="chevron">▾</span>
     </button>
@@ -406,14 +405,14 @@ textarea.json-area {
     </div></div>
   </div>
 
-  <div class="accordion open" id="acc-eye-shape">
+  <div class="accordion" id="acc-eye-shape">
     <button class="acc-header" onclick="toggleAcc('acc-eye-shape')">
       Eye Shape <span class="chevron">▾</span>
     </button>
     <div class="acc-body"><div class="acc-inner" id="panel-eye"></div></div>
   </div>
 
-  <div class="accordion open" id="acc-pupil">
+  <div class="accordion" id="acc-pupil">
     <button class="acc-header" onclick="toggleAcc('acc-pupil')">
       Pupil <span class="chevron">▾</span>
     </button>
@@ -427,42 +426,42 @@ textarea.json-area {
     <div class="acc-body"><div class="acc-inner" id="panel-nose"></div></div>
   </div>
 
-  <div class="accordion open" id="acc-mouth">
+  <div class="accordion" id="acc-mouth">
     <button class="acc-header" onclick="toggleAcc('acc-mouth')">
       Mouth <span class="chevron">▾</span>
     </button>
     <div class="acc-body"><div class="acc-inner" id="panel-mouth"></div></div>
   </div>
 
-  <div class="accordion open" id="acc-brow">
+  <div class="accordion" id="acc-brow">
     <button class="acc-header" onclick="toggleAcc('acc-brow')">
       Brows <span class="chevron">▾</span>
     </button>
     <div class="acc-body"><div class="acc-inner" id="panel-brow"></div></div>
   </div>
 
-  <div class="accordion open" id="acc-lids">
+  <div class="accordion" id="acc-lids">
     <button class="acc-header" onclick="toggleAcc('acc-lids')">
       Lids <span class="chevron">▾</span>
     </button>
     <div class="acc-body"><div class="acc-inner" id="panel-lids"></div></div>
   </div>
 
-  <div class="accordion open" id="acc-blink">
+  <div class="accordion" id="acc-blink">
     <button class="acc-header" onclick="toggleAcc('acc-blink')">
       Blink <span class="chevron">▾</span>
     </button>
     <div class="acc-body"><div class="acc-inner" id="panel-blink"></div></div>
   </div>
 
-  <div class="accordion open" id="acc-gaze">
+  <div class="accordion" id="acc-gaze">
     <button class="acc-header" onclick="toggleAcc('acc-gaze')">
       Gaze <span class="chevron">▾</span>
     </button>
     <div class="acc-body"><div class="acc-inner" id="panel-gaze"></div></div>
   </div>
 
-  <div class="accordion open" id="acc-anim">
+  <div class="accordion" id="acc-anim">
     <button class="acc-header" onclick="toggleAcc('acc-anim')">
       Animation <span class="chevron">▾</span>
     </button>
@@ -476,7 +475,7 @@ textarea.json-area {
     <div class="acc-body"><div class="acc-inner" id="panel-trail"></div></div>
   </div>
 
-  <div class="accordion open" id="acc-colors">
+  <div class="accordion" id="acc-colors">
     <button class="acc-header" onclick="toggleAcc('acc-colors')">
       Colors <span class="chevron">▾</span>
     </button>
