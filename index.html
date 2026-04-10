@@ -852,7 +852,8 @@ const state = {
   // 3D rotation state (drives Three.js head/body)
   head3DYaw:   0,   // degrees, positive = right
   head3DPitch: 0,   // degrees, positive = down
-  body3DYaw:   0,   // degrees, positive = right
+  body3DYaw:          0,   // degrees, positive = right
+  gazeTargetActive:   false, // true while ball drag overrides body rotation
 
   // Squash & stretch
   squashAmt:   0,   // current deformation (+ = stretch along travel, - = squash)
@@ -1203,7 +1204,8 @@ function update(dt) {
   // 3D rotation (drives Three.js scene via window.three)
   state.head3DYaw   = lerp(state.head3DYaw,   state.gazeX *  params.headRotationMax,        params.head3DSpeed);
   state.head3DPitch = lerp(state.head3DPitch,  state.gazeY *  params.headRotationMax * 0.35, params.head3DSpeed);
-  state.body3DYaw   = lerp(state.body3DYaw,    state.gazeX *  params.bodyRotationMax,        params.body3DSpeed);
+  if (!state.gazeTargetActive)
+    state.body3DYaw = lerp(state.body3DYaw, state.gazeX * params.bodyRotationMax, params.body3DSpeed);
 
   // ── Squash & stretch ──
   if (params.squashStretch > 0) {
@@ -2412,15 +2414,27 @@ function computeGazeFromBall() {
 
 // ── preUpdate — runs before main update() each frame ──
 function preUpdate() {
-  if (!isDragging) return;
   const s = window.state;
-  if (!s) return;
-  const { gx, gy } = computeGazeFromBall();
-  s.gazeX         = gx;
-  s.gazeY         = gy;
-  s.arc.active    = false;
-  s.arc.phase     = 'idle';
-  s.behaviorTimer = -0.5; // delay random saccade after release
+  const p = window.params;
+  if (!s || !p) return;
+
+  if (isDragging) {
+    s.gazeTargetActive = true;
+
+    // Full world-space horizontal angle from robot (origin) to ball
+    const worldAngleDeg = Math.atan2(ball.position.x, ball.position.z) * 180 / Math.PI;
+    s.body3DYaw = s.body3DYaw + (worldAngleDeg - s.body3DYaw) * Math.min(1, p.body3DSpeed * 3);
+
+    // Remaining gaze for pupil / head (relative to body facing)
+    const { gx, gy } = computeGazeFromBall();
+    s.gazeX         = gx;
+    s.gazeY         = gy;
+    s.arc.active    = false;
+    s.arc.phase     = 'idle';
+    s.behaviorTimer = -0.5;
+  } else {
+    s.gazeTargetActive = false;
+  }
 }
 
 // ── render — called after draw() each frame ──
