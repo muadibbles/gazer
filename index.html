@@ -1035,9 +1035,10 @@ const params = {
   blinkSquintDur:     0.05,  // duration of pre-squint phase before snap close (s)
   blinkSquintDepth:   0.35,  // how far pre-squint closes before snapping (0–1)
   blinkLidBow:        0.22,  // ⌣ bow depth on lid edge (fraction of displayRy)
-  blinkClosePos:      0.15,  // upper lid resting position at t=1 (fraction below center)
+  blinkClosePos:      0.88,  // upper lid close target at t=1 (fraction of displayRy; 0.88 meets lower lid)
   blinkLowerRise:     0.12,  // how far lower lid rises at t=1 (fraction of displayRy)
   blinkCrescentWidth: 0.10,  // crescent stroke thickness (fraction of displayRy)
+  halfBlinkChance:    0.15,  // probability a blink is a half-blink (lid only travels partway)
 
   // ── Drive system ──
   driveNoveltyDecay: 0.20,  // pressure/s lost by the currently active state
@@ -1670,6 +1671,7 @@ function updateBlink(dt) {
     if (b.timer >= interval) {
       b.timer = 0;
       logEvent('blink');
+      b.halfBlink = (Math.random() < params.halfBlinkChance);
       if (params.blinkAntAmt > 0) {
         // Widen before closing
         b.state = 'anticipating';
@@ -1686,6 +1688,7 @@ function updateBlink(dt) {
     if (b.t <= target) {
       b.t = target;
       b.state = 'squinting';
+      if (b.halfBlink === undefined) b.halfBlink = (Math.random() < params.halfBlinkChance);
     }
 
   } else if (b.state === 'squinting') {
@@ -1714,7 +1717,8 @@ function updateBlink(dt) {
         b.ftVel = 0;
         b.state = 'followthrough';
       } else {
-        b.state = 'open';
+        b.halfBlink = false;
+        b.state     = 'open';
         if (Math.random() < params.doubleBlink) {
           b.state = 'squinting';
           logEvent('blink ×2');
@@ -1728,9 +1732,10 @@ function updateBlink(dt) {
     b.t     += b.ftVel * dt;
     const settled = Math.abs(b.ftVel) < 0.005 && Math.abs(b.t) < 0.005;
     if (settled) {
-      b.t     = 0;
-      b.ftVel = 0;
-      b.state = 'open';
+      b.t       = 0;
+      b.ftVel   = 0;
+      b.halfBlink = false;
+      b.state   = 'open';
       if (Math.random() < params.doubleBlink) {
         b.state = 'squinting';
         logEvent('blink ×2');
@@ -2143,8 +2148,10 @@ function drawBlinkLid(eye) {
   if (displayRy < 0.5) return;
 
   // Upper lid leading edge: starts at top of eye (-displayRy) at t=0,
-  // arrives at closePos below center at t=1
-  const closeY = params.blinkClosePos * displayRy;
+  // arrives at closePos at t=1; half-blinks stop partway
+  const b = state.blink;
+  const effectiveClose = b.halfBlink ? params.blinkSquintDepth * 0.7 : params.blinkClosePos;
+  const closeY = effectiveClose * displayRy;
   const edgeY  = -displayRy + (displayRy + closeY) * Math.min(1, t);
 
   // The ⌣ bow: positive value pushes the centre of the curve downward,
@@ -3093,7 +3100,8 @@ function buildControlPanels() {
       ['blinkHold',          'Hold',           0,    0.5,  0.01,  2],
       ['doubleBlink',        'Double blink',   0,    1.0,  0.01,  2],
       ['blinkLidBow',        'Lid bow',        0,    0.5,  0.01,  2],
-      ['blinkClosePos',      'Close pos',      0,    0.5,  0.01,  2],
+      ['blinkClosePos',      'Close pos',      0,    1.0,  0.01,  2],
+      ['halfBlinkChance',    'Half-blink %',   0,    1.0,  0.01,  2],
       ['blinkLowerRise',     'Lower rise',     0,    0.4,  0.01,  2],
       ['blinkCrescentWidth', 'Crescent width', 0.02, 0.3,  0.01,  2],
     ],
@@ -3504,10 +3512,14 @@ let   timeSinceDrag  = Infinity; // starts in "timed out" state so idle runs fir
 const _headWorld     = new THREE.Vector3(); // pooled — reused every frame
 const _ballDir       = new THREE.Vector3();
 
-function getMouseNDC(e) {
-  const rect = container.getBoundingClientRect();
-  mouse.x =  ((e.clientX - rect.left) / rect.width)  * 2 - 1;
-  mouse.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
+// Use the renderer canvas directly for NDC so coordinates are always correct
+// regardless of how the canvas sits inside its container.
+const canvas3d = renderer.domElement;
+
+function getMouseNDC(clientX, clientY) {
+  const rect = canvas3d.getBoundingClientRect();
+  mouse.x =  ((clientX - rect.left) / rect.width)  * 2 - 1;
+  mouse.y = -((clientY - rect.top)  / rect.height) * 2 + 1;
 }
 
 function setAxisLock(axis, locked) {
@@ -3517,28 +3529,53 @@ function setAxisLock(axis, locked) {
 
 function setBallY(y) { ball.position.y = Math.max(0.05, Math.min(6, y)); }
 
-container.addEventListener('mousedown', e => {
-  getMouseNDC(e);
+function startDrag(clientX, clientY) {
+  getMouseNDC(clientX, clientY);
   raycaster.setFromCamera(mouse, camera);
   if (raycaster.intersectObject(ball).length > 0) {
     isDragging = true;
     controls.enabled = false;
     dragPlane.constant = -ball.position.y;
+    return true;
   }
-});
+  return false;
+}
 
-container.addEventListener('mousemove', e => {
+function moveDrag(clientX, clientY) {
   if (!isDragging) return;
-  getMouseNDC(e);
+  getMouseNDC(clientX, clientY);
   raycaster.setFromCamera(mouse, camera);
   if (raycaster.ray.intersectPlane(dragPlane, dragPoint)) {
     if (!lockX) ball.position.x = Math.max(-6, Math.min(6, dragPoint.x));
     if (!lockZ) ball.position.z = Math.max(-6, Math.min(6, dragPoint.z));
   }
-});
+}
 
-container.addEventListener('mouseup',    () => { if (isDragging) { isDragging = false; controls.enabled = true; } });
-container.addEventListener('mouseleave', () => { if (isDragging) { isDragging = false; controls.enabled = true; } });
+function endDrag() {
+  if (isDragging) { isDragging = false; controls.enabled = true; }
+}
+
+// Mouse
+canvas3d.addEventListener('mousedown', e => {
+  if (startDrag(e.clientX, e.clientY)) e.stopPropagation(); // prevent OrbitControls grabbing
+});
+canvas3d.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
+canvas3d.addEventListener('mouseup',    endDrag);
+canvas3d.addEventListener('mouseleave', endDrag);
+
+// Touch (iPad / touchscreen)
+canvas3d.addEventListener('touchstart', e => {
+  const t = e.touches[0];
+  if (startDrag(t.clientX, t.clientY)) e.preventDefault();
+}, { passive: false });
+canvas3d.addEventListener('touchmove', e => {
+  if (!isDragging) return;
+  e.preventDefault();
+  const t = e.touches[0];
+  moveDrag(t.clientX, t.clientY);
+}, { passive: false });
+canvas3d.addEventListener('touchend',   endDrag);
+canvas3d.addEventListener('touchcancel', endDrag);
 
 // ── Gaze from ball position ──
 function computeGazeFromBall() {
