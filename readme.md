@@ -159,6 +159,7 @@ See [docs/drive-system.md](docs/drive-system.md) for the full design.
 - [x] Squash & stretch — eye shape deforms slightly during fast saccades
 - [x] Spring physics — head/body rotation uses underdamped spring dynamics; natural ease-in/out and slight overshoot on every movement
 - [x] Arc motion — head tilts into yaw turns, body leans during rotation; 3D motion traces curves through space
+- [ ] Principles off switch — single checkbox that zeros all animation principle parameters (squash/stretch, anticipation, follow-through, arc curvature, easing, cascade delays) to show the mechanical baseline; useful for demonstrating what the principles actually contribute
 
 ### API & Integration
 - [x] WebSocket API — relay server + browser client; external processes send `behavior`, `attn`, `affect`, `param`, `look`, `blink`, `color` commands
