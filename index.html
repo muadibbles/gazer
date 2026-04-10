@@ -596,7 +596,8 @@ const params = {
   browThickness:   14,
   browArch:        18,   // arch height in pixels
   browRotation:    0,    // degrees, mirrored like eyes
-  browTaper:       0,    // 0 = uniform, 1 = tapers to points at ends
+  browTaperInner:  0,    // taper at bridge/nose end (0 = round cap, 1 = sharp point)
+  browTaperOuter:  0,    // taper at temple/tip end
 
   // ── Overlays ──
   showTrail:       false,
@@ -1382,8 +1383,10 @@ function drawNose() {
 
 // Tapered quadratic bezier — fills a variable-width shape along the curve.
 // taper=0: uniform width; taper=1: tapers to a point at both ends.
-function drawTaperedBezier(p0x, p0y, cpx, cpy, p1x, p1y, thickness, taper, color) {
-  const N = 32;
+// taperStart/taperEnd: 0 = full round cap, 1 = sharp point at that end.
+// roundCaps: add filled circles at each endpoint (matching the endcap width).
+function drawTaperedBezier(p0x, p0y, cpx, cpy, p1x, p1y, thickness, taperStart, taperEnd, color, roundCaps = false) {
+  const N  = 32;
   const hw = thickness / 2;
   const top = [], bot = [];
 
@@ -1397,19 +1400,34 @@ function drawTaperedBezier(p0x, p0y, cpx, cpy, p1x, p1y, thickness, taper, color
     const tlen = Math.sqrt(tx*tx + ty*ty) || 1;
     tx /= tlen; ty /= tlen;
     const nx = -ty, ny = tx;
-    const w  = hw * ((1 - taper) + taper * Math.sin(t * Math.PI));
+    // Piecewise sin: each half tapers from its end to full width at center
+    const wf = t <= 0.5
+      ? 1 - taperStart * (1 - Math.sin(t * Math.PI))
+      : 1 - taperEnd   * (1 - Math.sin(t * Math.PI));
+    const w = hw * wf;
     top.push([bx + nx*w, by + ny*w]);
     bot.push([bx - nx*w, by - ny*w]);
   }
 
   ctx.save();
   ctx.fillStyle = color;
+
+  // Filled polygon body
   ctx.beginPath();
   ctx.moveTo(top[0][0], top[0][1]);
   for (let i = 1; i <= N; i++) ctx.lineTo(top[i][0], top[i][1]);
   for (let i = N; i >= 0; i--) ctx.lineTo(bot[i][0], bot[i][1]);
   ctx.closePath();
   ctx.fill();
+
+  // Round end caps — circles whose radius matches the width at each tip
+  if (roundCaps) {
+    const r0 = hw * (1 - taperStart);
+    const r1 = hw * (1 - taperEnd);
+    if (r0 > 0.5) { ctx.beginPath(); ctx.arc(p0x, p0y, r0, 0, Math.PI * 2); ctx.fill(); }
+    if (r1 > 0.5) { ctx.beginPath(); ctx.arc(p1x, p1y, r1, 0, Math.PI * 2); ctx.fill(); }
+  }
+
   ctx.restore();
 }
 
@@ -1426,7 +1444,7 @@ function drawMouth() {
   const p1x = mx + hw, p1y = my;
 
   if (params.mouthTaper > 0) {
-    drawTaperedBezier(p0x, p0y, cpx, cpy, p1x, p1y, params.mouthThickness, params.mouthTaper, colors.mouthColor);
+    drawTaperedBezier(p0x, p0y, cpx, cpy, p1x, p1y, params.mouthThickness, params.mouthTaper, params.mouthTaper, colors.mouthColor, false);
   } else {
     ctx.save();
     ctx.beginPath();
@@ -1461,8 +1479,12 @@ function drawBrow(eye) {
   const [cpx, cpy] = toWorld(0, -arch);
   const [p1x, p1y] = toWorld(width / 2, 0);
 
-  if (params.browTaper > 0) {
-    drawTaperedBezier(p0x, p0y, cpx, cpy, p1x, p1y, thickness, params.browTaper, colors.browColor);
+  // p0 = inner (bridge) end for right brow, outer (temple) for left — swap per sign
+  const taperStart = sign === 1 ? params.browTaperInner : params.browTaperOuter;
+  const taperEnd   = sign === 1 ? params.browTaperOuter : params.browTaperInner;
+
+  if (taperStart > 0 || taperEnd > 0) {
+    drawTaperedBezier(p0x, p0y, cpx, cpy, p1x, p1y, thickness, taperStart, taperEnd, colors.browColor, true);
   } else {
     ctx.save();
     ctx.translate(ox, oy);
@@ -1833,7 +1855,8 @@ function buildControlPanels() {
       ['browThickness', 'Thickness',  2,   40,  1,   0],
       ['browArch',      'Arch',     -30,   80,  1,   0],
       ['browRotation',  'Rotation', -45,   45,  0.5, 1],
-      ['browTaper',     'Taper',      0,    1,  0.01, 2],
+      ['browTaperInner','Taper bridge', 0,  1,  0.01, 2],
+      ['browTaperOuter','Taper tip',   0,  1,  0.01, 2],
     ],
     'panel-lids': [
       ['showLids',     'Visible',    'bool'],
