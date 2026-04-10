@@ -1,6 +1,6 @@
 # gazer 👁️
 
-A browser-based robot eye animation and behavior system. Smooth arc-based gaze movement built as a proof of concept, designed to eventually run on embedded hardware (Raspberry Pi, Jetson, etc).
+An exploration of the 12 principles of animation applied to robotics — using a 3D robot with expressive eyes as the test subject. The goal is to understand what makes a robot feel alive rather than mechanical: how motion, timing, and expression create the impression of weight, intention, and personality. A secondary thread is robot personality implementation: how independent behavioral layers, state machines, and an emotion engine can give a robot a coherent inner life that shapes how it moves and responds over time. Browser-based, designed to eventually run on embedded hardware (Raspberry Pi, Jetson, etc).
 
 -----
 
