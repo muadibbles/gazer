@@ -16,12 +16,42 @@ A browser-based robot eye animation and behavior system. Smooth arc-based gaze m
 
 ## Behaviors
 
+### Classic
 |Behavior   |Gaze Range          |Speed |Blink Rate   |Feel                |
 |-----------|--------------------|------|-------------|--------------------|
 |`idle`     |moderate            |normal|normal       |relaxed, wandering  |
 |`attentive`|tight (center focus)|fast  |slow         |alert, tracking     |
 |`curious`  |wide                |medium|slightly slow|scanning, exploring |
 |`sleepy`   |small               |slow  |very high    |heavy-lidded, drowsy|
+
+### Attention
+|Behavior    |Gaze Range|Speed|Blink Rate|Feel                          |
+|------------|----------|-----|----------|------------------------------|
+|`alert`     |very tight|very fast|very slow|snapped to source, wide-eyed |
+|`searching` |very wide |medium-fast|moderate|scanning, seeking            |
+
+### Conversational
+|Behavior     |Gaze Range|Speed|Blink Rate|Feel                         |
+|-------------|----------|-----|----------|-----------------------------|
+|`listening`  |tight     |slow |slow      |receptive, focused on speaker|
+|`processing` |medium    |slow |high      |inward, defocused, thinking  |
+|`speaking`   |medium    |normal|normal   |natural, expressive          |
+|`waiting`    |medium    |slow |slightly high|patient, expectant        |
+
+### Affective
+|Behavior       |Gaze Range|Speed|Blink Rate|Feel                       |
+|---------------|----------|-----|----------|---------------------------|
+|`engaged`      |tight     |fast |very slow |bright, leaning in         |
+|`confused`     |medium    |medium|moderate |erratic, furrowed          |
+|`pleased`      |medium    |normal|high     |squinting smile, happy     |
+|`uncomfortable`|wide      |medium|high     |averted gaze, nervous      |
+
+### Operational
+|Behavior      |Gaze Range|Speed   |Blink Rate|Feel                      |
+|--------------|----------|--------|----------|--------------------------|
+|`waking`      |very tight|sluggish|very high |groggy, coming online     |
+|`resting`     |tiny      |very slow|very high|nearly shut down          |
+|`interrupted` |snap      |very fast|very low |startle, instant redirect |
 
 -----
 
@@ -94,6 +124,15 @@ The behavior controller is designed for expansion — each behavior is just a co
 - [ ] Clipping warning — highlight when pupil travel pushes near the iris edge
 - [ ] FPS counter — frame rate display, useful for hardware porting
 - [ ] Frame timing graph — sparkline of frame render times
+
+### Conversational Robot States
+- [x] Attention states — idle, alert, searching
+- [x] Conversational states — listening, processing, speaking, waiting
+- [x] Affective states — engaged, confused, pleased, uncomfortable
+- [x] Operational states — waking, resting, interrupted
+- [ ] State compositor — combine attention + conversational + affective layers so e.g. `listening` + `engaged` looks different from `listening` + `confused`
+- [ ] State machine transitions — define legal transitions and blend durations between states
+- [ ] External state driver — WebSocket / LLM inference pushes state changes
 
 ### Agency & Memory
 - [ ] Gazer personal time — when not attending to an operator target or external stimulus, gazer explores the space autonomously and builds its own spatial memories: locations it has looked at, how long, how often. Over time these memories shape where it chooses to look during idle, giving it a sense of accumulated experience and preference.

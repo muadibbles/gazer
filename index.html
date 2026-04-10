@@ -203,7 +203,14 @@ input[type="range"]::-webkit-slider-thumb {
 .behavior-buttons {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.behavior-group-label {
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  margin: 8px 0 4px;
 }
 
 button {
@@ -500,11 +507,37 @@ input[type="checkbox"].grid-cb:checked::after {
       Behavior <span class="chevron">▾</span>
     </button>
     <div class="acc-body"><div class="acc-inner">
+      <div class="behavior-group-label">CLASSIC</div>
       <div class="behavior-buttons">
-        <button id="btn-idle" class="active" onclick="setBehavior('idle')">Idle</button>
+        <button id="btn-idle"      class="active" onclick="setBehavior('idle')">Idle</button>
         <button id="btn-attentive" onclick="setBehavior('attentive')">Attentive</button>
-        <button id="btn-curious" onclick="setBehavior('curious')">Curious</button>
-        <button id="btn-sleepy" onclick="setBehavior('sleepy')">Sleepy</button>
+        <button id="btn-curious"   onclick="setBehavior('curious')">Curious</button>
+        <button id="btn-sleepy"    onclick="setBehavior('sleepy')">Sleepy</button>
+      </div>
+      <div class="behavior-group-label">ATTENTION</div>
+      <div class="behavior-buttons">
+        <button id="btn-alert"     onclick="setBehavior('alert')">Alert</button>
+        <button id="btn-searching" onclick="setBehavior('searching')">Searching</button>
+      </div>
+      <div class="behavior-group-label">CONVERSATIONAL</div>
+      <div class="behavior-buttons">
+        <button id="btn-listening"   onclick="setBehavior('listening')">Listening</button>
+        <button id="btn-processing"  onclick="setBehavior('processing')">Processing</button>
+        <button id="btn-speaking"    onclick="setBehavior('speaking')">Speaking</button>
+        <button id="btn-waiting"     onclick="setBehavior('waiting')">Waiting</button>
+      </div>
+      <div class="behavior-group-label">AFFECTIVE</div>
+      <div class="behavior-buttons">
+        <button id="btn-engaged"       onclick="setBehavior('engaged')">Engaged</button>
+        <button id="btn-confused"      onclick="setBehavior('confused')">Confused</button>
+        <button id="btn-pleased"       onclick="setBehavior('pleased')">Pleased</button>
+        <button id="btn-uncomfortable" onclick="setBehavior('uncomfortable')">Uncomfortable</button>
+      </div>
+      <div class="behavior-group-label">OPERATIONAL</div>
+      <div class="behavior-buttons">
+        <button id="btn-waking"      onclick="setBehavior('waking')">Waking</button>
+        <button id="btn-resting"     onclick="setBehavior('resting')">Resting</button>
+        <button id="btn-interrupted" onclick="setBehavior('interrupted')">Interrupted</button>
       </div>
     </div></div>
   </div>
@@ -955,15 +988,215 @@ const behaviors = {
     speedMult:     0.4,
     blinkMult:     2.5,
     lidOpenness:   () => params.lidOpenness * 0.55,
-    // Heavy upper lid droop, lower lid closing in — drowsy
     upperLid:      () => Math.min(1, params.upperLidPos + 0.35),
     lowerLid:      () => Math.min(1, params.lowerLidPos + 0.12),
-    // Brows low and drooping outward — heavy, sad, tired
     browRaise:     () => -14,
-    browTilt:      () => -8,  // outer corners down = sad/droopy
+    browTilt:      () => -8,
     browArch:      () => -8,
-    // Droopy frown — tired, sad
     mouthCurve:    () => -18,
+  },
+
+  // ── Attention ──────────────────────────────────────────────────────────────
+  alert: {
+    label: 'ALERT',
+    gazeRadius:    0.08,
+    pauseMin:      0.08, pauseMax: 0.25,
+    easeFn:        () => ease.inOutQuint,
+    speedMult:     3.2,
+    blinkMult:     0.15,
+    lidOpenness:   () => Math.min(1, params.lidOpenness * 1.18),
+    upperLid:      () => Math.max(0, params.upperLidPos - 0.10),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.08),
+    browRaise:     () => 20,   // shot up — startled
+    browTilt:      () =>  2,   // slight inward pull = concern
+    browArch:      () =>  6,
+    mouthCurve:    () =>  0,   // flat — tense
+  },
+  searching: {
+    label: 'SEARCHING',
+    gazeRadius:    0.88,
+    pauseMin:      0.18, pauseMax: 0.55,
+    easeFn:        () => ease.outBack,
+    speedMult:     1.7,
+    blinkMult:     0.65,
+    lidOpenness:   () => Math.min(1, params.lidOpenness * 1.06),
+    upperLid:      () => Math.max(0, params.upperLidPos - 0.03),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.02),
+    browRaise:     () =>  8,   // raised — seeking
+    browTilt:      () => -4,   // outer corners down = quizzical
+    browArch:      () =>  8,
+    mouthCurve:    () =>  4,
+  },
+
+  // ── Conversational ─────────────────────────────────────────────────────────
+  listening: {
+    label: 'LISTENING',
+    gazeRadius:    0.20,
+    pauseMin:      0.8,  pauseMax: 1.8,
+    easeFn:        () => ease.inOutCubic,
+    speedMult:     0.85,
+    blinkMult:     0.65,
+    lidOpenness:   () => params.lidOpenness,
+    upperLid:      () => Math.max(0, params.upperLidPos - 0.02),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.00),
+    browRaise:     () =>  6,   // receptive, open
+    browTilt:      () =>  2,   // slight inward = engaged
+    browArch:      () =>  4,
+    mouthCurve:    () =>  8,   // soft, attentive
+  },
+  processing: {
+    label: 'PROCESSING',
+    gazeRadius:    0.42,
+    pauseMin:      1.0,  pauseMax: 2.6,
+    easeFn:        () => ease.inOutCubic,
+    speedMult:     0.55,
+    blinkMult:     1.6,
+    lidOpenness:   () => params.lidOpenness * 0.88,
+    upperLid:      () => Math.min(1, params.upperLidPos + 0.12),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.04),
+    browRaise:     () => -5,   // slight furrow — thinking hard
+    browTilt:      () =>  9,   // inner corners down = concentration
+    browArch:      () => -4,
+    mouthCurve:    () => -4,   // slight purse
+  },
+  speaking: {
+    label: 'SPEAKING',
+    gazeRadius:    0.28,
+    pauseMin:      0.4,  pauseMax: 1.0,
+    easeFn:        () => ease.outBack,
+    speedMult:     1.15,
+    blinkMult:     1.1,
+    lidOpenness:   () => params.lidOpenness,
+    upperLid:      () => Math.min(1, params.upperLidPos + 0.02),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.00),
+    browRaise:     () =>  4,   // animated, expressive
+    browTilt:      () => -2,
+    browArch:      () =>  4,
+    mouthCurve:    () => 12,   // engaged smile
+  },
+  waiting: {
+    label: 'WAITING',
+    gazeRadius:    0.30,
+    pauseMin:      1.5,  pauseMax: 3.2,
+    easeFn:        () => ease.inOutCubic,
+    speedMult:     0.65,
+    blinkMult:     1.35,
+    lidOpenness:   () => params.lidOpenness * 0.96,
+    upperLid:      () => Math.min(1, params.upperLidPos + 0.05),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.00),
+    browRaise:     () =>  5,   // slightly raised — expectant
+    browTilt:      () =>  1,
+    browArch:      () =>  3,
+    mouthCurve:    () =>  3,
+  },
+
+  // ── Affective ──────────────────────────────────────────────────────────────
+  engaged: {
+    label: 'ENGAGED',
+    gazeRadius:    0.16,
+    pauseMin:      0.25, pauseMax: 0.70,
+    easeFn:        () => ease.inOutQuint,
+    speedMult:     1.7,
+    blinkMult:     0.45,
+    lidOpenness:   () => Math.min(1, params.lidOpenness * 1.14),
+    upperLid:      () => Math.max(0, params.upperLidPos - 0.08),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.06),
+    browRaise:     () => 16,   // bright and interested
+    browTilt:      () =>  2,
+    browArch:      () => 10,
+    mouthCurve:    () => 18,   // open, warm smile
+  },
+  confused: {
+    label: 'CONFUSED',
+    gazeRadius:    0.48,
+    pauseMin:      0.28, pauseMax: 0.85,
+    easeFn:        () => ease.outBack,   // slight erratic overshoot
+    speedMult:     0.9,
+    blinkMult:     1.25,
+    lidOpenness:   () => params.lidOpenness * 0.92,
+    upperLid:      () => Math.min(1, params.upperLidPos + 0.10),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.02),
+    browRaise:     () => -6,   // lowered center
+    browTilt:      () => 11,   // inner corners down = confused furrow
+    browArch:      () => -5,
+    mouthCurve:    () => -8,
+  },
+  pleased: {
+    label: 'PLEASED',
+    gazeRadius:    0.30,
+    pauseMin:      0.8,  pauseMax: 2.0,
+    easeFn:        () => ease.outBack,
+    speedMult:     1.0,
+    blinkMult:     1.9,   // happy blinks
+    lidOpenness:   () => params.lidOpenness * 0.86,   // happy squint
+    upperLid:      () => Math.min(1, params.upperLidPos + 0.14),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.06),
+    browRaise:     () => 10,
+    browTilt:      () => -8,  // outer corners up = happy
+    browArch:      () => 14,
+    mouthCurve:    () => 30,  // big smile
+  },
+  uncomfortable: {
+    label: 'UNCOMFORTABLE',
+    gazeRadius:    0.58,   // averted, looking away
+    pauseMin:      0.35,   pauseMax: 0.85,
+    easeFn:        () => ease.outQuart,
+    speedMult:     1.2,
+    blinkMult:     1.9,   // nervous blinks
+    lidOpenness:   () => params.lidOpenness * 0.88,
+    upperLid:      () => Math.min(1, params.upperLidPos + 0.14),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.04),
+    browRaise:     () => -2,
+    browTilt:      () =>  7,  // inner corners up = worried
+    browArch:      () => -4,
+    mouthCurve:    () => -14,
+  },
+
+  // ── Operational ────────────────────────────────────────────────────────────
+  waking: {
+    label: 'WAKING',
+    gazeRadius:    0.10,
+    pauseMin:      0.5,  pauseMax: 1.5,
+    easeFn:        () => ease.outQuart,
+    speedMult:     0.45,
+    blinkMult:     3.2,
+    lidOpenness:   () => params.lidOpenness * 0.52,
+    upperLid:      () => Math.min(1, params.upperLidPos + 0.32),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.10),
+    browRaise:     () => -10,
+    browTilt:      () => -4,
+    browArch:      () => -4,
+    mouthCurve:    () => -6,
+  },
+  resting: {
+    label: 'RESTING',
+    gazeRadius:    0.08,
+    pauseMin:      4.5,  pauseMax: 9.0,
+    easeFn:        () => ease.outQuart,
+    speedMult:     0.28,
+    blinkMult:     3.8,
+    lidOpenness:   () => params.lidOpenness * 0.38,
+    upperLid:      () => Math.min(1, params.upperLidPos + 0.42),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.14),
+    browRaise:     () => -14,
+    browTilt:      () => -6,
+    browArch:      () => -6,
+    mouthCurve:    () => -16,
+  },
+  interrupted: {
+    label: 'INTERRUPTED',
+    gazeRadius:    0.04,
+    pauseMin:      0.04, pauseMax: 0.15,
+    easeFn:        () => ease.inOutQuint,
+    speedMult:     4.5,
+    blinkMult:     0.12,
+    lidOpenness:   () => Math.min(1, params.lidOpenness * 1.22),
+    upperLid:      () => Math.max(0, params.upperLidPos - 0.12),
+    lowerLid:      () => Math.min(1, params.lowerLidPos + 0.10),
+    browRaise:     () => 22,   // max raised — startle
+    browTilt:      () =>  0,
+    browArch:      () =>  8,
+    mouthCurve:    () =>  0,   // neutral, frozen mid-expression
   },
 };
 
