@@ -1339,18 +1339,6 @@ function drawEye(eye) {
   const displayRy = ry * openness;
   if (displayRy < 0.5) return;
 
-  // Squash & stretch — world-space deform around eye center
-  const ss = state.squashAmt;
-  const hasDeform = params.squashStretch > 0 && Math.abs(ss) > 0.001;
-  if (hasDeform) {
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(state.squashAngle);
-    ctx.scale(1 + ss, 1 / (1 + Math.abs(ss)));
-    ctx.rotate(-state.squashAngle);
-    ctx.translate(-cx, -cy);
-  }
-
   // Gaze offset in eye-local space, then rotate into canvas space
   const travel = params.pupilTravel;
   const localDx = (state.gazeX + params.pupilBiasX + params.pupilSpacing * sign) * rx * travel;
@@ -1389,7 +1377,6 @@ function drawEye(eye) {
   }
 
   ctx.restore();
-  if (hasDeform) ctx.restore();
 }
 
 function drawLids(eye) {
@@ -1680,7 +1667,22 @@ function draw() {
     state.faceY + state.headY + state.bodyY
   );
 
-  getEyes().forEach(eye => { drawEye(eye); if (params.showLids) drawLids(eye); if (params.showBrows) drawBrow(eye); });
+  getEyes().forEach(eye => {
+    const ss = state.squashAmt;
+    const hasDeform = params.squashStretch > 0 && Math.abs(ss) > 0.001;
+    if (hasDeform) {
+      ctx.save();
+      ctx.translate(eye.cx, eye.cy);
+      ctx.rotate(state.squashAngle);
+      ctx.scale(1 + ss, 1 / (1 + Math.abs(ss)));
+      ctx.rotate(-state.squashAngle);
+      ctx.translate(-eye.cx, -eye.cy);
+    }
+    drawEye(eye);
+    if (params.showLids)  drawLids(eye);
+    if (params.showBrows) drawBrow(eye);
+    if (hasDeform) ctx.restore();
+  });
   getEyes().forEach(eye => { drawTrail(eye); drawSTI(eye); });
   drawNose();
   if (params.showMouth) drawMouth();
@@ -1724,9 +1726,10 @@ function loop(ts) {
   const dt = Math.min((ts - lastTime) / 1000, 0.05);
   lastTime = ts;
 
+  if (window.three) window.three.preUpdate(); // gaze override before physics
   update(dt);
   draw();
-  if (window.three) window.three.update();
+  if (window.three) window.three.render();
   requestAnimationFrame(loop);
 }
 
@@ -2344,8 +2347,84 @@ function resize() {
 resize();
 window.addEventListener('resize', resize);
 
-// ── Per-frame update (called from main RAF loop) ──
-function update() {
+// ── Gaze target ball ──
+const ballMat = new THREE.MeshLambertMaterial({ color: 0xffdd00, emissive: 0x443300 });
+const ball = new THREE.Mesh(new THREE.SphereGeometry(0.12, 20, 14), ballMat);
+ball.position.set(0, WR + C + C / 2, 2.5); // start at head height, in front
+ball.castShadow = true;
+scene.add(ball);
+
+// ── Drag interaction ──
+const raycaster    = new THREE.Raycaster();
+const mouse        = new THREE.Vector2();
+const dragPlane    = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const dragPoint    = new THREE.Vector3();
+let   isDragging   = false;
+
+function getMouseNDC(e) {
+  const rect = container.getBoundingClientRect();
+  mouse.x =  ((e.clientX - rect.left) / rect.width)  * 2 - 1;
+  mouse.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
+}
+
+container.addEventListener('mousedown', e => {
+  getMouseNDC(e);
+  raycaster.setFromCamera(mouse, camera);
+  if (raycaster.intersectObject(ball).length > 0) {
+    isDragging = true;
+    controls.enabled = false;
+    dragPlane.constant = -ball.position.y;
+  }
+});
+
+container.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  getMouseNDC(e);
+  raycaster.setFromCamera(mouse, camera);
+  if (raycaster.ray.intersectPlane(dragPlane, dragPoint)) {
+    ball.position.x = Math.max(-6, Math.min(6, dragPoint.x));
+    ball.position.z = Math.max(-6, Math.min(6, dragPoint.z));
+  }
+});
+
+container.addEventListener('mouseup', () => {
+  if (isDragging) { isDragging = false; controls.enabled = true; }
+});
+container.addEventListener('mouseleave', () => {
+  if (isDragging) { isDragging = false; controls.enabled = true; }
+});
+
+// ── Gaze from ball position ──
+function computeGazeFromBall() {
+  const headWorld = new THREE.Vector3();
+  headGroup.getWorldPosition(headWorld);
+  const dir = new THREE.Vector3().subVectors(ball.position, headWorld).normalize();
+  // Robot faces +Z. Right = +X, Up = +Y.
+  const maxAngle   = Math.PI / 3; // 60° range
+  const horizAngle = Math.atan2(dir.x, dir.z);
+  const dist2D     = Math.sqrt(dir.x * dir.x + dir.z * dir.z);
+  const vertAngle  = Math.atan2(dir.y, dist2D);
+  return {
+    gx: Math.max(-1, Math.min(1,  horizAngle / maxAngle)),
+    gy: Math.max(-1, Math.min(1, -vertAngle  / maxAngle)),
+  };
+}
+
+// ── preUpdate — runs before main update() each frame ──
+function preUpdate() {
+  if (!isDragging) return;
+  const s = window.state;
+  if (!s) return;
+  const { gx, gy } = computeGazeFromBall();
+  s.gazeX         = gx;
+  s.gazeY         = gy;
+  s.arc.active    = false;
+  s.arc.phase     = 'idle';
+  s.behaviorTimer = -0.5; // delay random saccade after release
+}
+
+// ── render — called after draw() each frame ──
+function render() {
   faceTexture.needsUpdate = true;
 
   const s = window.state;
@@ -2354,11 +2433,8 @@ function update() {
     headGroup.rotation.y =  s.head3DYaw   * Math.PI / 180;
     headGroup.rotation.x =  s.head3DPitch * Math.PI / 180;
     robot.rotation.y     =  s.body3DYaw   * Math.PI / 180;
-
-    // Sync colors each frame (catches config loads)
     applyColors();
-    const bg = window.colors?.stageBg ?? '#0a0a0f';
-    renderer.setClearColor(new THREE.Color(bg));
+    renderer.setClearColor(new THREE.Color(window.colors?.stageBg ?? '#0a0a0f'));
   }
 
   controls.update();
@@ -2373,7 +2449,7 @@ function applyColors() {
   wheelMat.color.set(c.wheelColor);
 }
 
-window.three = { update, resize, applyColors };
+window.three = { preUpdate, render, resize, applyColors };
 </script>
 
 </body>
