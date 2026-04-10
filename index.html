@@ -2028,6 +2028,10 @@ loadConfig();
 buildControlPanels();
 buildColorPanel();
 syncAllSliders();
+// Expose to Three.js module (const at top-level non-module script doesn't auto-assign to window)
+window.state  = state;
+window.params = params;
+window.colors = colors;
 logEvent('system ready');
 logEvent('behavior → idle');
 
