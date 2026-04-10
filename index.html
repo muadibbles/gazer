@@ -567,7 +567,7 @@ input[type="checkbox"].grid-cb:checked::after {
 
 <header>
   <h1><span class="status-dot"></span>Gazer</h1>
-  <span>v0.03 — robot eye behavior system</span>
+  <span>v0.04 — robot eye behavior system</span>
 </header>
 
 <div class="left-panel">
@@ -1035,7 +1035,7 @@ const params = {
   blinkSquintDur:     0.05,  // duration of pre-squint phase before snap close (s)
   blinkSquintDepth:   0.35,  // how far pre-squint closes before snapping (0–1)
   blinkLidBow:        0.22,  // ⌣ bow depth on lid edge (fraction of displayRy)
-  blinkClosePos:      0.88,  // upper lid close target at t=1 (fraction of displayRy; 0.88 meets lower lid)
+  blinkClosePos:      1.00,  // fill arc centre target at t=1 (1.0 = full close; arc endpoint = closePos+bow)
   blinkLowerRise:     0.12,  // how far lower lid rises at t=1 (fraction of displayRy)
   blinkCrescentWidth: 0.10,  // crescent stroke thickness (fraction of displayRy)
   halfBlinkChance:    0.15,  // probability a blink is a half-blink (lid only travels partway)
@@ -2147,16 +2147,16 @@ function drawBlinkLid(eye) {
   const displayRy = ry * beh.lidOpenness();
   if (displayRy < 0.5) return;
 
-  // Upper lid leading edge: starts at top of eye (-displayRy) at t=0,
-  // arrives at closePos at t=1; half-blinks stop partway
+  // bow must be defined first — used in closeY formula
+  const bow = displayRy * params.blinkLidBow;
+
+  // closeY = target for ARC ENDPOINTS at t=1; arc centre = closeY - bow = effectiveClose*displayRy.
+  // Adding bow ensures the fill centre reaches effectiveClose*displayRy (not stopping short).
+  // blinkClosePos = 1.0 → fill centre hits the clip boundary = full close.
   const b = state.blink;
   const effectiveClose = b.halfBlink ? params.blinkSquintDepth * 0.7 : params.blinkClosePos;
-  const closeY = effectiveClose * displayRy;
+  const closeY = effectiveClose * displayRy + bow;
   const edgeY  = -displayRy + (displayRy + closeY) * Math.min(1, t);
-
-  // The ⌣ bow: positive value pushes the centre of the curve downward,
-  // making the edge concave-upward (bowl shape, like a closed eye)
-  const bow = displayRy * params.blinkLidBow;
 
   // Lower lid rises subtly from the bottom
   const lowerRiseY = displayRy * (1 - params.blinkLowerRise * Math.min(1, t));
@@ -2172,14 +2172,14 @@ function drawBlinkLid(eye) {
   ctx.rotate(rot);
 
   // ── Upper lid (face/background colour sweeping down) ──
-  // Fill uses a flat bottom extending past the crescent so the iris is fully
-  // covered — the bow curve is only the crescent stroke, not the fill edge.
+  // ⌢ bow curve as fill bottom: arc centre = edgeY - bow = effectiveClose*displayRy at t=1,
+  // so the fill reaches the clip boundary (full close) when blinkClosePos = 1.0.
   ctx.fillStyle = colors.lidColor;
   ctx.beginPath();
   ctx.moveTo(-rx,  -displayRy * 3);    // well above eye — no gap at top edge
   ctx.lineTo( rx,  -displayRy * 3);
-  ctx.lineTo( rx,   edgeY + bow);      // extend past crescent endpoints
-  ctx.lineTo(-rx,   edgeY + bow);      // flat — iris fully covered at t=1
+  ctx.lineTo( rx,   edgeY);
+  ctx.quadraticCurveTo(0, edgeY - bow, -rx, edgeY);  // ⌢ arc
   ctx.closePath();
   ctx.fill();
 
@@ -2192,18 +2192,6 @@ function drawBlinkLid(eye) {
   ctx.quadraticCurveTo(0, lowerRiseY + bow * 0.25, -rx, lowerRiseY);
   ctx.closePath();
   ctx.fill();
-
-  // ── Crescent — ⌢ edge of the upper lid, visible as the closed-eye shape ──
-  const cw = Math.max(1, displayRy * params.blinkCrescentWidth);
-  ctx.globalAlpha = Math.min(1, t * 3);   // fades in quickly, full by t≈0.33
-  ctx.strokeStyle = colors.eyeColor;
-  ctx.lineWidth   = cw;
-  ctx.lineCap     = 'round';
-  ctx.beginPath();
-  ctx.moveTo(-rx * 0.78, edgeY);
-  ctx.quadraticCurveTo(0, edgeY - bow, rx * 0.78, edgeY);
-  ctx.stroke();
-  ctx.globalAlpha = 1;
 
   ctx.restore();
 }
@@ -3102,7 +3090,7 @@ function buildControlPanels() {
       ['blinkHold',          'Hold',           0,    0.5,  0.01,  2],
       ['doubleBlink',        'Double blink',   0,    1.0,  0.01,  2],
       ['blinkLidBow',        'Lid bow',        0,    0.5,  0.01,  2],
-      ['blinkClosePos',      'Close pos',      0,    1.0,  0.01,  2],
+      ['blinkClosePos',      'Close pos',      0,    1.3,  0.01,  2],
       ['halfBlinkChance',    'Half-blink %',   0,    1.0,  0.01,  2],
       ['blinkLowerRise',     'Lower rise',     0,    0.4,  0.01,  2],
       ['blinkCrescentWidth', 'Crescent width', 0.02, 0.3,  0.01,  2],
