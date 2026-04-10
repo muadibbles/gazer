@@ -448,6 +448,10 @@ input[type="checkbox"].grid-cb:checked::after {
     <input type="checkbox" class="grid-cb" id="toggle-3d" onchange="toggle3D(this.checked)" />
     <label for="toggle-3d">3D View</label>
   </div>
+  <div class="view-toggle-row">
+    <input type="checkbox" class="grid-cb" id="toggle-gizmo" checked onchange="window.three?.setGizmoVisible(this.checked)" />
+    <label for="toggle-gizmo">Gizmo handles</label>
+  </div>
   <div class="accordion" id="acc-ws">
     <button class="acc-header" onclick="toggleAcc('acc-ws')">
       WebSocket API <span class="chevron">▾</span>
@@ -2356,12 +2360,47 @@ ball.position.set(0, WR + C + C / 2, 2.5); // start at head height, in front
 ball.castShadow = true;
 scene.add(ball);
 
+// ── Axis gizmo ──
+const gizmo = new THREE.Group();
+ball.add(gizmo);
+
+const AXIS_DIRS = {
+  x: new THREE.Vector3(1, 0, 0),
+  y: new THREE.Vector3(0, 1, 0),
+  z: new THREE.Vector3(0, 0, 1),
+};
+const AXIS_COLORS = { x: 0xff3333, y: 0x44ee44, z: 0x4488ff };
+const AXIS_ROTS   = {
+  x: (g) => { g.rotation.z = -Math.PI / 2; },
+  y: (g) => {},
+  z: (g) => { g.rotation.x =  Math.PI / 2; },
+};
+
+for (const axis of ['x', 'y', 'z']) {
+  const mat   = new THREE.MeshLambertMaterial({ color: AXIS_COLORS[axis] });
+  const group = new THREE.Group();
+  // Shaft
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.42, 8), mat);
+  shaft.position.y = 0.21;
+  shaft.userData.axis = axis;
+  group.add(shaft);
+  // Arrowhead cone
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.13, 10), mat);
+  cone.position.y = 0.485;
+  cone.userData.axis = axis;
+  group.add(cone);
+  AXIS_ROTS[axis](group);
+  gizmo.add(group);
+}
+
 // ── Drag interaction ──
-const raycaster    = new THREE.Raycaster();
-const mouse        = new THREE.Vector2();
-const dragPlane    = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-const dragPoint    = new THREE.Vector3();
-let   isDragging   = false;
+const raycaster       = new THREE.Raycaster();
+const mouse           = new THREE.Vector2();
+const dragPlane       = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const dragPoint       = new THREE.Vector3();
+const dragStartBall   = new THREE.Vector3();
+let   isDragging      = false;
+let   dragAxis        = null;   // 'x' | 'y' | 'z' | null (free XZ)
 
 function getMouseNDC(e) {
   const rect = container.getBoundingClientRect();
@@ -2369,13 +2408,46 @@ function getMouseNDC(e) {
   mouse.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
 }
 
+// Closest-point-on-axis drag: finds how far along axisDir the mouse ray passes
+function axisConstrainedPos(axisDir) {
+  const ro = raycaster.ray.origin;
+  const rd = raycaster.ray.direction;
+  const w  = new THREE.Vector3().subVectors(dragStartBall, ro);
+  const b  = axisDir.dot(rd);
+  const d  = axisDir.dot(w);
+  const e  = rd.dot(w);
+  const den = 1 - b * b;
+  if (Math.abs(den) < 1e-6) return null;
+  const t = (b * e - d) / den;
+  return new THREE.Vector3().copy(dragStartBall).addScaledVector(axisDir, t);
+}
+
 container.addEventListener('mousedown', e => {
   getMouseNDC(e);
   raycaster.setFromCamera(mouse, camera);
+
+  // Check gizmo handles first (recursive into shaft+cone children)
+  if (gizmo.visible) {
+    const hits = raycaster.intersectObjects(gizmo.children, true);
+    if (hits.length > 0) {
+      const ax = hits[0].object.userData.axis;
+      if (ax) {
+        dragAxis = ax;
+        isDragging = true;
+        controls.enabled = false;
+        dragStartBall.copy(ball.position);
+        return;
+      }
+    }
+  }
+
+  // Fall back to free XZ drag on ball body
   if (raycaster.intersectObject(ball).length > 0) {
+    dragAxis = null;
     isDragging = true;
     controls.enabled = false;
     dragPlane.constant = -ball.position.y;
+    dragStartBall.copy(ball.position);
   }
 });
 
@@ -2383,18 +2455,24 @@ container.addEventListener('mousemove', e => {
   if (!isDragging) return;
   getMouseNDC(e);
   raycaster.setFromCamera(mouse, camera);
-  if (raycaster.ray.intersectPlane(dragPlane, dragPoint)) {
-    ball.position.x = Math.max(-6, Math.min(6, dragPoint.x));
-    ball.position.z = Math.max(-6, Math.min(6, dragPoint.z));
+
+  if (dragAxis) {
+    const newPos = axisConstrainedPos(AXIS_DIRS[dragAxis]);
+    if (newPos) {
+      ball.position.x = Math.max(-6, Math.min(6, newPos.x));
+      ball.position.y = Math.max(0.05, Math.min(6, newPos.y));
+      ball.position.z = Math.max(-6, Math.min(6, newPos.z));
+    }
+  } else {
+    if (raycaster.ray.intersectPlane(dragPlane, dragPoint)) {
+      ball.position.x = Math.max(-6, Math.min(6, dragPoint.x));
+      ball.position.z = Math.max(-6, Math.min(6, dragPoint.z));
+    }
   }
 });
 
-container.addEventListener('mouseup', () => {
-  if (isDragging) { isDragging = false; controls.enabled = true; }
-});
-container.addEventListener('mouseleave', () => {
-  if (isDragging) { isDragging = false; controls.enabled = true; }
-});
+container.addEventListener('mouseup',    () => { if (isDragging) { isDragging = false; dragAxis = null; controls.enabled = true; } });
+container.addEventListener('mouseleave', () => { if (isDragging) { isDragging = false; dragAxis = null; controls.enabled = true; } });
 
 // ── Gaze from ball position ──
 function computeGazeFromBall() {
@@ -2463,7 +2541,7 @@ function applyColors() {
   wheelMat.color.set(c.wheelColor);
 }
 
-window.three = { preUpdate, render, resize, applyColors };
+window.three = { preUpdate, render, resize, applyColors, setGizmoVisible: v => { gizmo.visible = v; } };
 </script>
 
 </body>
