@@ -113,7 +113,7 @@ Because the browser is a pure renderer with no execution responsibility, overlay
 | Saccade target indicator | Where the next landing point will be |
 | Spring force vectors | Current acceleration on head and body |
 | Compositor blend bar | Both layers, with easing curve visualization |
-| Behavior pressure bars | Per-state pressure levels (once emotion engine exists) |
+| Behavior pressure bars | Per-state pressure levels (once drive system exists) |
 | Velocity heatmap | Accumulated dwell density over a session |
 | Blink countdown | Time until next blink |
 | FPS / frame timing | Render health on hardware |
@@ -140,7 +140,7 @@ Recorded sessions are useful for:
 - Reviewing how a behavior sequence actually looked end-to-end
 - Debugging unexpected transitions or physics artifacts
 - Measuring things post-hoc (dwell time, saccade frequency, behavior durations)
-- Generating training data for the emotion engine
+- Generating training data for the drive system
 
 ---
 

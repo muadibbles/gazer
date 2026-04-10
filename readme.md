@@ -1,6 +1,6 @@
 # gazer 👁️
 
-An exploration of the 12 principles of animation applied to robotics — using a 3D robot with expressive eyes as the test subject. The goal is to understand what makes a robot feel alive rather than mechanical: how motion, timing, and expression create the impression of weight, intention, and personality. A secondary thread is robot personality implementation: how independent behavioral layers, state machines, and an emotion engine can give a robot a coherent inner life that shapes how it moves and responds over time. Browser-based, designed to eventually run on embedded hardware (Raspberry Pi, Jetson, etc).
+An exploration of the 12 principles of animation applied to robotics — using a 3D robot with expressive eyes as the test subject. The goal is to understand what makes a robot feel alive rather than mechanical: how motion, timing, and expression create the impression of weight, intention, and personality. A secondary thread is robot personality implementation: how independent behavioral layers, state machines, and a drive system can give a robot a coherent inner life that shapes how it moves and responds over time. Browser-based, designed to eventually run on embedded hardware (Raspberry Pi, Jetson, etc).
 
 -----
 
@@ -140,15 +140,15 @@ See [docs/animation-principles.md](docs/animation-principles.md) for the full st
 - [x] State machine — per-state blend duration + easing (`interrupted` = instant snap, `resting` = 1.5s melt); pair-specific overrides (e.g. `pleased→uncomfortable` = 0.9s reluctant shift); `maxHold` auto-return; live progress bar
 - [x] Micro-expressions — brief flashes of affect (200ms) that don't fully commit, then return to base state; 5 named presets (startle, wince, brighten, doubt, drift); independent hold timer; WebSocket `micro` command
 
-### Emotion Engine
-- [ ] Pressure/scoring system — each state has a "pressure" that builds over time or from stimulus; highest pressure wins; novelty decay makes gazer restless
-- [ ] Rule engine — simple if/then rules mapping external events to state changes (`speaking=true → attn:speaking, affect:engaged`)
-- [ ] Transition enforcer — prevents illegal jumps (e.g. `resting → interrupted` must go through `alert`), enforces hold times
-- [ ] External state driver — WebSocket / LLM / audio pipeline pushes `{ attn, affect }` pairs to the compositor
-- [ ] Drive layer — what gazer wants when no external input is present; bridges into personal time
+### Drive System
 
-### Agency & Memory
-- [ ] Gazer personal time — when not attending to an operator target or external stimulus, gazer explores the space autonomously and builds its own spatial memories: locations it has looked at, how long, how often. Over time these memories shape where it chooses to look during idle, giving it a sense of accumulated experience and preference.
+See [docs/drive-system.md](docs/drive-system.md) for the full design.
+
+- [ ] Pressure/scoring — per-state pressure, novelty decay, hysteresis threshold
+- [ ] Drive layer — default pressure profiles define baseline temperament; autonomous floor when no stimulus is present
+- [ ] Rule engine — event bus maps external stimuli to pressure changes; micro-expressions for reactive punctuation
+- [ ] Transition enforcer — reroutes illegal state jumps through intermediate states
+- [ ] Personal time — spatial memory of dwell history shapes idle gaze over a session
 
 ### Expression System
 - [ ] Environmental context awareness — context tags (e.g. "Meeting", "Reading") influence behavior parameters
