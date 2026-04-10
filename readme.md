@@ -236,6 +236,12 @@ Areas with room to grow: **exaggeration** (states could push harder at extremes;
 
 -----
 
+## Robot deployment
+
+See [docs/robot-architecture.md](docs/robot-architecture.md) for the design plan: behavior engine extraction, state broadcast, telemetry sim view, recording/playback, hardware output adapters, and input pipeline.
+
+-----
+
 ## Running locally
 
 Just open `index.html` in a browser. No build step needed.
