@@ -2435,43 +2435,47 @@ function preUpdate(dt) {
   const p = window.params;
   if (!s || !p) return;
 
-  s.gazeTargetActive = true; // block main-update 3D lerps
+  s.gazeTargetActive = true;
 
-  const targetAngleDeg = Math.atan2(ball.position.x, ball.position.z) * 180 / Math.PI;
-  const maxHead        = p.headRotationMax;
+  const HEAD_SHARE   = 0.75;
+  const EYE_SHARE    = 0.25;
+  const EYE_NORM_DEG = 60 * EYE_SHARE; // 15° maps to gazeX/Y ±1
+  const headSpeed    = p.head3DSpeed * 80;
+  const maxHead      = p.headRotationMax;
 
-  // ── Head leads: tracks target in world space, clamped to its rotation limit ──
-  const headWorldAngle = s.body3DYaw + s.head3DYaw;
-  const headSpeed      = p.head3DSpeed * 80; // convert slider scale → dt-based
-  const newHeadWorld   = headWorldAngle + (targetAngleDeg - headWorldAngle) * Math.min(1, dt * headSpeed);
-  s.head3DYaw          = Math.max(-maxHead, Math.min(maxHead, newHeadWorld - s.body3DYaw));
+  // ── Yaw: head takes 75%, eyes cover the remaining 25% ──
+  const targetYawDeg  = Math.atan2(ball.position.x, ball.position.z) * 180 / Math.PI;
+  const relYawDeg     = targetYawDeg - s.body3DYaw;
+  const headYawTarget = Math.max(-maxHead, Math.min(maxHead, relYawDeg * HEAD_SHARE));
+  s.head3DYaw        += (headYawTarget - s.head3DYaw) * Math.min(1, dt * headSpeed);
+  const remainingYaw  = relYawDeg - s.head3DYaw;
+  const gazeXTarget   = Math.max(-1, Math.min(1, remainingYaw / EYE_NORM_DEG));
 
-  // Vertical: head pitch toward ball
+  // ── Pitch: head takes 75%, eyes cover the remaining 25% ──
   const headWorld = new THREE.Vector3();
   headGroup.getWorldPosition(headWorld);
-  const dir     = new THREE.Vector3().subVectors(ball.position, headWorld);
-  const dist2D  = Math.sqrt(dir.x * dir.x + dir.z * dir.z);
-  const pitchDeg = -Math.atan2(dir.y, dist2D) * 180 / Math.PI;
-  s.head3DPitch  += (pitchDeg - s.head3DPitch) * Math.min(1, dt * headSpeed);
+  const dir            = new THREE.Vector3().subVectors(ball.position, headWorld);
+  const dist2D         = Math.sqrt(dir.x * dir.x + dir.z * dir.z);
+  const totalPitchDeg  = -Math.atan2(dir.y, dist2D) * 180 / Math.PI;
+  const headPitchTarget = totalPitchDeg * HEAD_SHARE;
+  s.head3DPitch        += (headPitchTarget - s.head3DPitch) * Math.min(1, dt * headSpeed);
+  const remainingPitch  = totalPitchDeg - s.head3DPitch;
+  const gazeYTarget     = Math.max(-1, Math.min(1, remainingPitch / EYE_NORM_DEG));
 
-  // ── Body follows: only kicks in when head is stretched past 60% of its range ──
-  const bodySpeed    = p.body3DSpeed * 80;
-  const deadband     = maxHead * 0.6;
-  const absHead      = Math.abs(s.head3DYaw);
-  if (absHead > deadband) {
+  // ── Body follows when head yaw exceeds 60% of its range ──
+  const bodySpeed = p.body3DSpeed * 80;
+  const deadband  = maxHead * 0.6;
+  if (Math.abs(s.head3DYaw) > deadband) {
     const excess  = s.head3DYaw - Math.sign(s.head3DYaw) * deadband;
     s.body3DYaw  += excess * Math.min(1, dt * bodySpeed);
   }
 
-  // ── Pupil/gaze override while actively dragging ──
-  if (isDragging) {
-    const { gx, gy } = computeGazeFromBall();
-    s.gazeX         = gx;
-    s.gazeY         = gy;
-    s.arc.active    = false;
-    s.arc.phase     = 'idle';
-    s.behaviorTimer = -0.5;
-  }
+  // ── Drive pupils toward the 25% remainder ──
+  s.gazeX = s.gazeX + (gazeXTarget - s.gazeX) * Math.min(1, dt * headSpeed);
+  s.gazeY = s.gazeY + (gazeYTarget - s.gazeY) * Math.min(1, dt * headSpeed);
+  s.arc.active    = false;
+  s.arc.phase     = 'idle';
+  s.behaviorTimer = -0.5;
 }
 
 // ── render — called after draw() each frame ──
