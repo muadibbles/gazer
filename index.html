@@ -567,7 +567,7 @@ input[type="checkbox"].grid-cb:checked::after {
 
 <header>
   <h1><span class="status-dot"></span>Gazer</h1>
-  <span>v0.02 — robot eye behavior system</span>
+  <span>v0.03 — robot eye behavior system</span>
 </header>
 
 <div class="left-panel">
@@ -2172,12 +2172,14 @@ function drawBlinkLid(eye) {
   ctx.rotate(rot);
 
   // ── Upper lid (face/background colour sweeping down) ──
+  // Fill uses a flat bottom extending past the crescent so the iris is fully
+  // covered — the bow curve is only the crescent stroke, not the fill edge.
   ctx.fillStyle = colors.lidColor;
   ctx.beginPath();
   ctx.moveTo(-rx,  -displayRy * 3);    // well above eye — no gap at top edge
   ctx.lineTo( rx,  -displayRy * 3);
-  ctx.lineTo( rx,   edgeY);
-  ctx.quadraticCurveTo(0, edgeY - bow, -rx, edgeY);
+  ctx.lineTo( rx,   edgeY + bow);      // extend past crescent endpoints
+  ctx.lineTo(-rx,   edgeY + bow);      // flat — iris fully covered at t=1
   ctx.closePath();
   ctx.fill();
 
