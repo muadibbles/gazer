@@ -1031,6 +1031,14 @@ const params = {
   blinkOvDamp:     8,     // spring damping
   blinkOvStiff:    120,   // spring stiffness
 
+  // ── Blink lid shape ──
+  blinkSquintDur:     0.05,  // duration of pre-squint phase before snap close (s)
+  blinkSquintDepth:   0.35,  // how far pre-squint closes before snapping (0–1)
+  blinkLidBow:        0.22,  // ⌣ bow depth on lid edge (fraction of displayRy)
+  blinkClosePos:      0.15,  // upper lid resting position at t=1 (fraction below center)
+  blinkLowerRise:     0.12,  // how far lower lid rises at t=1 (fraction of displayRy)
+  blinkCrescentWidth: 0.10,  // crescent stroke thickness (fraction of displayRy)
+
   // ── Drive system ──
   driveNoveltyDecay: 0.20,  // pressure/s lost by the currently active state
   driveRiseRate:     0.80,  // rate at which pressure rises toward profile target
@@ -1666,7 +1674,7 @@ function updateBlink(dt) {
         // Widen before closing
         b.state = 'anticipating';
       } else {
-        b.state = 'closing';
+        b.state = 'squinting';
         b.t = 0;
       }
     }
@@ -1677,6 +1685,14 @@ function updateBlink(dt) {
     b.t -= dt / Math.max(0.01, params.blinkAntDur);
     if (b.t <= target) {
       b.t = target;
+      b.state = 'squinting';
+    }
+
+  } else if (b.state === 'squinting') {
+    // Quick partial close — pre-squint before snap
+    b.t += dt / Math.max(0.01, params.blinkSquintDur);
+    if (b.t >= params.blinkSquintDepth) {
+      b.t = params.blinkSquintDepth;
       b.state = 'closing';
     }
 
@@ -1700,7 +1716,7 @@ function updateBlink(dt) {
       } else {
         b.state = 'open';
         if (Math.random() < params.doubleBlink) {
-          b.state = 'closing';
+          b.state = 'squinting';
           logEvent('blink ×2');
         }
       }
@@ -1716,7 +1732,7 @@ function updateBlink(dt) {
       b.ftVel = 0;
       b.state = 'open';
       if (Math.random() < params.doubleBlink) {
-        b.state = 'closing';
+        b.state = 'squinting';
         logEvent('blink ×2');
       }
     }
@@ -2009,8 +2025,9 @@ function drawEye(eye) {
   const { cx, cy, rx, ry, rot, sign } = eye;
   const beh = getBehavior();
 
-  // Blink squishes ry to zero
-  const openness  = beh.lidOpenness() * (1 - state.blink.t);
+  // t<0 = eye wider than normal (anticipation/followthrough); t>0 = lid occludes (handled by drawBlinkLid)
+  const blinkT    = state.blink.t;
+  const openness  = beh.lidOpenness() * (blinkT < 0 ? 1 - blinkT : 1);
   const displayRy = ry * openness;
   if (displayRy < 0.5) return;
 
@@ -2057,7 +2074,8 @@ function drawEye(eye) {
 function drawLids(eye) {
   const { cx, cy, rx, ry, rot } = eye;
   const beh = getBehavior();
-  const openness  = beh.lidOpenness() * (1 - state.blink.t);
+  const blinkT    = state.blink.t;
+  const openness  = beh.lidOpenness() * (blinkT < 0 ? 1 - blinkT : 1);
   const displayRy = ry * openness;
   if (displayRy < 0.5) return;
 
@@ -2108,6 +2126,75 @@ function drawLids(eye) {
     ctx.closePath();
     ctx.fill();
   }
+
+  ctx.restore();
+}
+
+// Draws blink occlusion lid on top of the iris/pupil — separate from the decorative
+// expression lids. Upper lid sweeps down in face color; a ⌣ crescent edge in eye
+// color marks the lid position and remains as the closed-eye shape at t=1.
+function drawBlinkLid(eye) {
+  const t = state.blink.t;
+  if (t <= 0) return;
+
+  const { cx, cy, rx, ry, rot } = eye;
+  const beh       = getBehavior();
+  const displayRy = ry * beh.lidOpenness();
+  if (displayRy < 0.5) return;
+
+  // Upper lid leading edge: starts at top of eye (-displayRy) at t=0,
+  // arrives at closePos below center at t=1
+  const closeY = params.blinkClosePos * displayRy;
+  const edgeY  = -displayRy + (displayRy + closeY) * Math.min(1, t);
+
+  // The ⌣ bow: positive value pushes the centre of the curve downward,
+  // making the edge concave-upward (bowl shape, like a closed eye)
+  const bow = displayRy * params.blinkLidBow;
+
+  // Lower lid rises subtly from the bottom
+  const lowerRiseY = displayRy * (1 - params.blinkLowerRise * Math.min(1, t));
+
+  ctx.save();
+
+  // Clip both lid fills to the eye ellipse for clean rounded boundaries
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, displayRy, rot, 0, Math.PI * 2);
+  ctx.clip();
+
+  ctx.translate(cx, cy);
+  ctx.rotate(rot);
+
+  // ── Upper lid (face/background colour sweeping down) ──
+  ctx.fillStyle = colors.lidColor;
+  ctx.beginPath();
+  ctx.moveTo(-rx,  -displayRy - 2);
+  ctx.lineTo( rx,  -displayRy - 2);
+  ctx.lineTo( rx,   edgeY);
+  ctx.quadraticCurveTo(0, edgeY + bow, -rx, edgeY);
+  ctx.closePath();
+  ctx.fill();
+
+  // ── Lower lid (rises slightly from bottom) ──
+  ctx.fillStyle = colors.lidColor;
+  ctx.beginPath();
+  ctx.moveTo(-rx,  displayRy + 2);
+  ctx.lineTo( rx,  displayRy + 2);
+  ctx.lineTo( rx,  lowerRiseY);
+  ctx.quadraticCurveTo(0, lowerRiseY - bow * 0.25, -rx, lowerRiseY);
+  ctx.closePath();
+  ctx.fill();
+
+  // ── Crescent — ⌣ edge of the upper lid, visible as the closed-eye shape ──
+  const cw = Math.max(1, displayRy * params.blinkCrescentWidth);
+  ctx.globalAlpha = Math.min(1, t * 3);   // fades in quickly, full by t≈0.33
+  ctx.strokeStyle = colors.eyeColor;
+  ctx.lineWidth   = cw;
+  ctx.lineCap     = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-rx * 0.78, edgeY);
+  ctx.quadraticCurveTo(0, edgeY + bow, rx * 0.78, edgeY);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
 
   ctx.restore();
 }
@@ -2355,6 +2442,7 @@ function draw() {
     }
     drawEye(eye);
     if (params.showLids)  drawLids(eye);
+    drawBlinkLid(eye);
     if (hasDeform) ctx.restore();
     if (params.showBrows) drawBrow(eye);
   });
@@ -2996,12 +3084,18 @@ function buildControlPanels() {
       ['lidRotation',  'Rotation',  -45,  45,  0.5,  1],
     ],
     'panel-blink': [
-      ['lidOpenness',      'Openness',     0.1, 1.0,  0.01, 2],
-      ['blinkInterval',    'Interval',     0.5, 15,   0.1,  1],
-      ['blinkCloseSpeed',  'Close speed',  0.02, 0.5, 0.01, 2],
-      ['blinkOpenSpeed',   'Open speed',   0.02, 0.5, 0.01, 2],
-      ['blinkHold',        'Hold',         0,    0.5, 0.01, 2],
-      ['doubleBlink',      'Double blink', 0,    1.0, 0.01, 2],
+      ['lidOpenness',        'Openness',       0.1,  1.0,  0.01,  2],
+      ['blinkInterval',      'Interval',       0.5,  15,   0.1,   1],
+      ['blinkSquintDur',     'Squint dur',     0.01, 0.15, 0.005, 3],
+      ['blinkSquintDepth',   'Squint depth',   0,    0.8,  0.01,  2],
+      ['blinkCloseSpeed',    'Close speed',    0.02, 0.5,  0.01,  2],
+      ['blinkOpenSpeed',     'Open speed',     0.02, 0.5,  0.01,  2],
+      ['blinkHold',          'Hold',           0,    0.5,  0.01,  2],
+      ['doubleBlink',        'Double blink',   0,    1.0,  0.01,  2],
+      ['blinkLidBow',        'Lid bow',        0,    0.5,  0.01,  2],
+      ['blinkClosePos',      'Close pos',      0,    0.5,  0.01,  2],
+      ['blinkLowerRise',     'Lower rise',     0,    0.4,  0.01,  2],
+      ['blinkCrescentWidth', 'Crescent width', 0.02, 0.3,  0.01,  2],
     ],
     'panel-gaze': [
       ['arcCurvature',      'Arc curve',          0,    1,   0.01, 2],
@@ -3232,7 +3326,7 @@ function wsHandleMessage(msg) {
 
     case 'blink':
       if (state.blink.state === 'open') {
-        state.blink.state = 'closing';
+        state.blink.state = 'squinting';
         state.blink.t = 0;
         state.blink.timer = 0;
         logEvent('ws → blink');

@@ -114,7 +114,7 @@ See [docs/animation-principles.md](docs/animation-principles.md) for the full st
 - [x] Brows — shape, taper (inner/outer ends, round caps), and animation controls
 - [x] Mouth — shape, taper, and animation controls
 - [x] Nose — bridge and nostril shape controls
-- [ ] Better blink mechanics — multi-stage lid travel, asymmetric open/close timing, hold at closed
+- [x] Better blink mechanics — multi-stage lid travel (squint→close→hold→open), lid occlusion with ⌣ crescent, pupil retains shape
 - [ ] Phonemes — mouth shapes mapped to phoneme groups (A/E/I/O/U, consonants)
 - [ ] Lip sync — drive phonemes from audio analysis or text-to-speech timing data
 
