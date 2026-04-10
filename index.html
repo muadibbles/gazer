@@ -460,6 +460,12 @@ input[type="checkbox"].grid-cb:checked::after {
     <input type="range" id="ball-y" min="0.1" max="5" step="0.05" value="2.26" style="flex:1;"
       oninput="window.three?.setBallY(+this.value)"/>
   </div>
+  <div class="view-toggle-row" style="gap:6px;align-items:center;">
+    <label for="ball-timeout" style="white-space:nowrap;">Track timeout</label>
+    <input type="range" id="ball-timeout" min="0.5" max="10" step="0.5" value="3" style="flex:1;"
+      oninput="params.ballTrackTimeout=+this.value; document.getElementById('ball-timeout-val').textContent=this.value+'s'"/>
+    <span id="ball-timeout-val" style="color:var(--muted);font-size:11px;min-width:28px;">3s</span>
+  </div>
   <div class="accordion" id="acc-ws">
     <button class="acc-header" onclick="toggleAcc('acc-ws')">
       WebSocket API <span class="chevron">▾</span>
@@ -718,6 +724,7 @@ const params = {
   bodyShiftSpeed:     0.3, // lerp speed
   bodyRotationMax:    10,  // degrees — max 3D body yaw
   body3DSpeed:        0.02, // lerp speed for 3D body yaw
+  ballTrackTimeout:   3,   // seconds before reverting to idle wander after drag ends
 
   // ── Anticipation (saccade) ──
   anticipationAmt: 0,     // 0 = off; 0.1–0.4 = wind-up distance (ratio of saccade dist)
@@ -2374,8 +2381,9 @@ const raycaster  = new THREE.Raycaster();
 const mouse      = new THREE.Vector2();
 const dragPlane  = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const dragPoint  = new THREE.Vector3();
-let   isDragging = false;
-let   lockX = false, lockZ = false;
+let   isDragging     = false;
+let   lockX          = false, lockZ = false;
+let   timeSinceDrag  = Infinity; // starts in "timed out" state so idle runs first
 
 function getMouseNDC(e) {
   const rect = container.getBoundingClientRect();
@@ -2435,7 +2443,13 @@ function preUpdate(dt) {
   const p = window.params;
   if (!s || !p) return;
 
-  s.gazeTargetActive = true;
+  // Track time since last drag; reset on each drag frame
+  if (isDragging) timeSinceDrag = 0;
+  else            timeSinceDrag += dt;
+
+  const tracking = timeSinceDrag < p.ballTrackTimeout;
+  s.gazeTargetActive = tracking;
+  if (!tracking) return; // hand control back to idle saccade system
 
   const HEAD_SHARE   = 0.75;
   const EYE_SHARE    = 0.25;
