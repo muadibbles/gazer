@@ -22,6 +22,18 @@ Micro-expressions are brief flashes of affect — 200–500ms — that surface, 
 
 A startled wince. A flicker of confusion. A brief pleasure response before settling back to neutral. The underlying affect state doesn't change; the micro-expression borrows the face for a moment.
 
-Mechanically this uses the existing `maxHold` system: the affect layer snaps or blends quickly to the micro-expression state, holds for the specified duration, then returns automatically to whatever affect was active before. Because `interrupted` already demonstrates this pattern (snap in, hold 0.5s, return), micro-expressions are a natural extension — shorter holds, faster transitions, and a wider vocabulary of triggering states.
+Mechanically this uses an independent hold timer (`microHoldTimer`) separate from the main `holdTimer` used by `interrupted`. The affect layer snaps in fast (0.05s, outQuart easing) regardless of the target behavior's normal enter duration, holds for the specified time, then returns automatically to whatever affect was active before. A full `setAffect()` call cancels any active micro-expression immediately.
+
+Five named presets are available in the UI and via WebSocket:
+
+| Preset | Behavior | Hold |
+|--------|----------|------|
+| Startle | `alert` | 0.15s |
+| Wince | `uncomfortable` | 0.20s |
+| Brighten | `pleased` | 0.25s |
+| Doubt | `confused` | 0.22s |
+| Drift | `processing` | 0.30s |
+
+WebSocket: `{"type": "micro", "value": "pleased", "hold": 0.25}` — any behavior name is valid, `hold` is optional.
 
 The value of micro-expressions is legibility. A robot whose face only changes when its full behavioral state changes looks slow and deliberate. One whose face briefly reacts to events — then settles — reads as present and responsive, even when its underlying state is stable.

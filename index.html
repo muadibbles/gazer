@@ -274,6 +274,16 @@ input[type="range"]::-webkit-slider-thumb {
   border-color: var(--accent);
   font-weight: 700;
 }
+/* Micro-expression trigger buttons — gold */
+.micro-btn {
+  background: rgba(230, 184, 0, 0.10);
+  border-color: rgba(230, 184, 0, 0.30);
+  color: #e6b800;
+}
+.micro-btn:hover {
+  background: rgba(230, 184, 0, 0.25);
+  border-color: rgba(230, 184, 0, 0.60);
+}
 
 button {
   background: transparent;
@@ -664,6 +674,15 @@ input[type="checkbox"].grid-cb:checked::after {
           <button id="affect-resting"     class="affect-btn" onclick="setAffect('resting')">Resting</button>
           <button id="affect-interrupted" class="affect-btn" onclick="setAffect('interrupted')">Interrupted</button>
         </div>
+
+        <div class="behavior-group-label" style="margin-top:10px;color:#e6b800;border-color:rgba(230,184,0,0.2)">MICRO-EXPRESSIONS</div>
+        <div class="behavior-buttons">
+          <button class="micro-btn" onclick="microExpress('alert',0.15)">Startle</button>
+          <button class="micro-btn" onclick="microExpress('uncomfortable',0.20)">Wince</button>
+          <button class="micro-btn" onclick="microExpress('pleased',0.25)">Brighten</button>
+          <button class="micro-btn" onclick="microExpress('confused',0.22)">Doubt</button>
+          <button class="micro-btn" onclick="microExpress('processing',0.30)">Drift</button>
+        </div>
       </div>
 
     </div></div>
@@ -1028,6 +1047,9 @@ const state = {
   holdTimer:      0,                 // countdown for maxHold auto-return
   holdReturnAttn:   null,            // attn key to return to on hold expiry (null = don't change)
   holdReturnAffect: null,            // affect key to return to on hold expiry
+  microHoldTimer:  0,                // countdown for micro-expression auto-return
+  microHoldReturn: null,             // affect key to return to after micro-expression
+  microHoldDur:    0,                // initial hold duration (for progress bar %)
   behaviorTimer: 0,
 
   // Arc trail
@@ -1734,6 +1756,17 @@ function update(dt) {
     }
   }
 
+  // Micro-expression hold timer — independent of holdTimer
+  if (state.microHoldTimer > 0) {
+    state.microHoldTimer -= dt;
+    if (state.microHoldTimer <= 0) {
+      state.microHoldTimer = 0;
+      const ret = state.microHoldReturn;
+      state.microHoldReturn = null;
+      if (ret !== null) setAffect(ret);
+    }
+  }
+
   updateBlink(dt);
 
   // Smooth blink reaction for brow/mouth follow
@@ -2213,15 +2246,19 @@ function draw() {
 function updateCompUI() {
   const fill = document.getElementById('comp-trans-fill');
   if (!fill) return;
-  const inHold = state.holdTimer > 0;
-  if (inHold) {
-    // Drain bar as hold counts down (orange)
+  if (state.microHoldTimer > 0) {
+    // Gold: micro-expression hold draining
+    const pct = (state.microHoldTimer / (state.microHoldDur || 1) * 100).toFixed(1) + '%';
+    fill.style.width      = pct;
+    fill.style.background = '#e6b800';
+  } else if (state.holdTimer > 0) {
+    // Orange: maxHold countdown (e.g. interrupted)
     const beh = behaviors[state.attn] || behaviors.idle;
-    const pct  = (state.holdTimer / (beh.maxHold || 1) * 100).toFixed(1) + '%';
+    const pct = (state.holdTimer / (beh.maxHold || 1) * 100).toFixed(1) + '%';
     fill.style.width      = pct;
     fill.style.background = 'var(--accent)';
   } else if (state.transBlend < 1) {
-    // Fill bar as blend progresses (teal)
+    // Teal: blend in progress
     fill.style.width      = (state.transBlend * 100).toFixed(1) + '%';
     fill.style.background = 'var(--iris)';
   } else {
@@ -2437,6 +2474,9 @@ function setAttn(name) {
 
 function setAffect(name) {
   if (!behaviors[name] || state.affect === name) return;
+  // Full affect change cancels any active micro-expression
+  state.microHoldTimer  = 0;
+  state.microHoldReturn = null;
   const { dur, eFn } = _resolveTransition(state.affect, name);
   const beh = behaviors[name];
 
@@ -2456,6 +2496,25 @@ function setAffect(name) {
   document.getElementById('affect-' + name)?.classList.add('active');
   _compUpdateStatus();
   logEvent(`expr → ${name}` + (dur < 0.05 ? ' ⚡' : ` (${dur.toFixed(2)}s)`));
+}
+
+// Micro-expression: snap affect to name for holdDur seconds, then return
+function microExpress(name, holdDur) {
+  if (!behaviors[name]) return;
+  holdDur = holdDur != null ? holdDur : 0.25;
+  // Save return target — keep original if already in a micro
+  if (state.microHoldReturn === null) {
+    state.microHoldReturn = state.affect;
+  }
+  state.microHoldTimer = holdDur;
+  state.microHoldDur   = holdDur;
+  // Force fast snap regardless of behavior's normal enterDur
+  _startTransition();
+  state.transDur    = 0.05;
+  state.transEaseFn = ease.outQuart;
+  state.affect = name;
+  _compUpdateStatus();
+  logEvent(`micro → ${name} (${holdDur.toFixed(2)}s) ✦`);
 }
 
 // Legacy / linked mode — sets both layers simultaneously
@@ -2789,6 +2848,10 @@ function wsHandleMessage(msg) {
 
     case 'affect':
       if (behaviors[msg.value]) setAffect(msg.value);
+      break;
+
+    case 'micro':
+      microExpress(msg.value, msg.hold != null ? parseFloat(msg.hold) : undefined);
       break;
 
     case 'param':

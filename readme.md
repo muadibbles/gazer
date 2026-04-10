@@ -138,7 +138,7 @@ See [docs/animation-principles.md](docs/animation-principles.md) for the full st
 - [x] Operational states — waking, resting, interrupted
 - [x] State compositor — two independent layers (gaze + expression); any behavior usable as either template; mixed freely; live status display
 - [x] State machine — per-state blend duration + easing (`interrupted` = instant snap, `resting` = 1.5s melt); pair-specific overrides (e.g. `pleased→uncomfortable` = 0.9s reluctant shift); `maxHold` auto-return; live progress bar
-- [ ] Micro-expressions — brief flashes of affect (200ms) that don't fully commit, then return to base state
+- [x] Micro-expressions — brief flashes of affect (200ms) that don't fully commit, then return to base state; 5 named presets (startle, wince, brighten, doubt, drift); independent hold timer; WebSocket `micro` command
 
 ### Emotion Engine
 - [ ] Pressure/scoring system — each state has a "pressure" that builds over time or from stimulus; highest pressure wins; novelty decay makes gazer restless
