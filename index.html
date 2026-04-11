@@ -3093,6 +3093,7 @@ function draw() {
   updateCompUI();
   updateDriveUI();
   updatePoiWidget();
+  wsBroadcastState();
 }
 
 function updateCompUI() {
@@ -4091,6 +4092,8 @@ logEvent('gaze → idle  |  expr → idle');
 // ─────────────────────────────────────────────
 
 let ws = null;
+let _lastStateBroadcast = 0;
+const _STATE_HZ = 20; // state packets sent per second
 
 function wsSetStatus(status) {
   const dot = document.getElementById('ws-dot');
@@ -4098,6 +4101,56 @@ function wsSetStatus(status) {
   if (!dot || !txt) return;
   dot.className = 'ws-dot ' + status;
   txt.textContent = status;
+}
+
+function wsBroadcastState() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const now = Date.now();
+  if (now - _lastStateBroadcast < 1000 / _STATE_HZ) return;
+  _lastStateBroadcast = now;
+
+  const s    = state;
+  const pois = window.pois || [];
+  const beh  = getBehavior();
+
+  const packet = {
+    type: 'state',
+    t:    now,
+    data: {
+      attn:        s.attn,
+      affect:      s.affect,
+      behavior:    beh.label,
+      poiIdx:      s.poiIdx,
+      poiLabel:    (pois[s.poiIdx] || {}).label ?? null,
+      gazeX:       +s.gazeX.toFixed(3),
+      gazeY:       +s.gazeY.toFixed(3),
+      head3DYaw:   +s.head3DYaw.toFixed(2),
+      head3DPitch: +s.head3DPitch.toFixed(2),
+      body3DYaw:   +(s.body3DYaw  || 0).toFixed(2),
+      blinking:    !!s.blink.active,
+      amplitude:   +s.amplitudeSmoothed.toFixed(3),
+      drive: {
+        enabled:  s.drive.enabled,
+        pressure: Object.fromEntries(
+          Object.entries(s.drive.pressure).map(([k, v]) => [k, +v.toFixed(3)])
+        ),
+      },
+      activeTask: s.activeTask ? {
+        action: s.activeTask.action,
+        mode:   s.activeTask.mode,
+        source: s.activeTask.sourcePOI,
+        target: s.activeTask.targetPOI,
+        phase:  +(s.activeTask.phase || 0).toFixed(2),
+      } : null,
+      pois: pois.map(p => ({
+        label:       p.label,
+        familiarity: +p.familiarity.toFixed(3),
+        attention:   +p.attention.toFixed(1),
+      })),
+    },
+  };
+
+  try { ws.send(JSON.stringify(packet)); } catch (_) {}
 }
 
 function wsConnect() {
