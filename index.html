@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GAZER v0.11</title>
+  <title>GAZER v0.12</title>
   <script type="importmap">
   {
     "imports": {
@@ -536,6 +536,21 @@ textarea.json-area {
 .poi-label.person { background: rgba(255,136,68,0.80); border: 1px solid rgba(255,180,120,0.9); }
 .poi-label.pet    { background: rgba(60,200,100,0.80);  border: 1px solid rgba(100,240,140,0.9); }
 .poi-label.object { background: rgba(60,120,255,0.80);  border: 1px solid rgba(120,170,255,0.9); }
+.poi-name { display: block; }
+.poi-bar  {
+  height: 3px;
+  background: rgba(255,255,255,0.18);
+  border-radius: 2px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+.poi-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.85);
+  width: 0%;
+  transition: width 0.6s ease;
+}
 
 /* Grid toggle */
 .grid-toggle-row {
@@ -587,7 +602,7 @@ input[type="checkbox"].grid-cb:checked::after {
 
 <header>
   <h1><span class="status-dot"></span>Gazer</h1>
-  <span>v0.11 — robot eye behavior system</span>
+  <span>v0.12 — robot eye behavior system</span>
 </header>
 
 <div class="left-panel">
@@ -1820,6 +1835,7 @@ function updatePoiFamiliarity(dt) {
   }
   if (state.poiIdx >= 0 && state.poiIdx < pois.length) {
     pois[state.poiIdx].familiarity = Math.min(1, pois[state.poiIdx].familiarity + params.ptAccum * dt);
+    pois[state.poiIdx].attention += dt;  // cumulative, never decays
   }
 }
 
@@ -3761,10 +3777,19 @@ window.pois = POI_INIT.map(({ x, y, z, s, label, category, color }) => {
   // HTML overlay label — always screen-space above the marker, never draggable
   const el = document.createElement('div');
   el.className = `poi-label ${category}`;
-  el.textContent = label;
+  const nameEl = document.createElement('span');
+  nameEl.className = 'poi-name';
+  nameEl.textContent = label;
+  const barEl = document.createElement('div');
+  barEl.className = 'poi-bar';
+  const fillEl = document.createElement('div');
+  fillEl.className = 'poi-bar-fill';
+  barEl.appendChild(fillEl);
+  el.appendChild(nameEl);
+  el.appendChild(barEl);
   container.appendChild(el);
 
-  return { mesh, salience: s, familiarity: 0, label, category, el };
+  return { mesh, salience: s, familiarity: 0, attention: 0, label, category, el, fillEl };
 });
 
 // Apply any saved POI positions from localStorage (written by saveConfig in main script)
@@ -3996,11 +4021,17 @@ function render() {
     // POI markers + HTML label projection
     const pois = window.pois || [];
     const cw = container.clientWidth, ch = container.clientHeight;
+    const maxAttention = pois.reduce((m, p2) => Math.max(m, p2.attention), 0.001);
+
     pois.forEach((poi, i) => {
       const show = !!(p.showPOIs);
       poi.mesh.visible = show;
       const isActive = s.poiIdx === i;
       const fam = poi.familiarity;
+
+      // Scale marker by cumulative attention (1× baseline → up to 2.2× for most-watched)
+      const attNorm = poi.attention / maxAttention;           // 0..1 relative to session leader
+      poi.mesh.scale.setScalar(1 + attNorm * 1.2);
 
       // Glow: active = white flash; novel = full own colour; familiar = dim
       if (isActive) {
@@ -4014,12 +4045,14 @@ function render() {
       }
       poi.mesh.rotation.y += 0.008;
 
+      // Attention bar fill (relative to session leader)
+      if (poi.fillEl) poi.fillEl.style.width = `${Math.round(attNorm * 100)}%`;
+
       // Project world position → screen coords for the HTML label
-      // Offset slightly above the marker in world space before projecting
       _labelPos.copy(poi.mesh.position);
-      _labelPos.y += 0.45;
+      _labelPos.y += 0.45 + attNorm * 0.3;  // label rises with marker size
       _labelPos.project(camera);
-      const behind = _labelPos.z > 1; // clip labels behind the camera
+      const behind = _labelPos.z > 1;
       const sx = (_labelPos.x * 0.5 + 0.5) * cw;
       const sy = (-_labelPos.y * 0.5 + 0.5) * ch;
       poi.el.style.display = (show && !behind) ? 'block' : 'none';
