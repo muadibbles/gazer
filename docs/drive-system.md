@@ -53,13 +53,14 @@ A simple set of if/then rules that translate external events into pressure chang
 Examples:
 
 ```
-event: speech_start         → pressure[speaking]   += 0.8
-event: speech_end           → pressure[speaking]   -= 0.8; pressure[listening] += 0.3
-event: face_detected(x, y)  → pressure[attentive]  += 0.6; look(x, y)
-event: face_lost            → pressure[searching]  += 0.4
-event: long_silence         → pressure[waiting]    += 0.2 * t
-event: loud_sound           → microExpress('alert', 0.15)
-event: error_state          → pressure[uncomfortable] += 0.5
+event: speech_start                   → pressure[speaking]      += 0.8
+event: speech_end                     → pressure[speaking]      -= 0.8; pressure[listening] += 0.3
+event: face_detected({ x, y, z })     → pressure[attentive]     += 0.6; look3D(x, y, z, 'person')
+event: face_lost                      → pressure[searching]     += 0.4
+event: motion_detected({ x, y, z })   → pressure[searching]     += 0.3; look3D(x, y, z, 'object')
+event: long_silence                   → pressure[waiting]       += 0.2 * t
+event: loud_sound                     → microExpress('alert', 0.15)
+event: error_state                    → pressure[uncomfortable] += 0.5
 ```
 
 Rules can fire micro-expressions directly for events that don't warrant a full state change — a loud sound, a brief confusion, a moment of pleasure — without disrupting the pressure state underneath.
@@ -94,31 +95,58 @@ The drive layer produces a baseline pressure vector that stimulus rules add to. 
 
 ### 5. Personal time and memory
 
-When the robot is not responding to an external target, it explores autonomously — and remembers where it has looked, how long, and how often. These memories accumulate over a session and shape where the drive layer directs attention during idle.
+When the robot is not responding to an external target, it explores autonomously — and remembers where it has looked, how long, and how often. These memories are stored per-POI (Point of Interest) and shape where the drive layer directs attention during idle.
 
-A location looked at often becomes familiar; the robot is less likely to fixate there again (novelty decay in spatial form). A location rarely visited becomes interesting. Over time the robot develops spatial preferences that are unique to its session history.
+Each POI tracks two values:
+- **`familiarity`** — 0→1, accumulates while dwelling, decays when not attending. Drives novelty-weighted selection: recently visited POIs are less likely to be chosen next.
+- **`attention`** — cumulative dwell time in seconds, never decays. Visualized as marker size and a fill bar in the label. Answers "what has the robot been most interested in this session?"
+
+A POI visited often becomes familiar; the robot is less likely to fixate there again. A POI rarely visited becomes interesting. Over time the robot develops spatial preferences that are unique to its session history.
 
 This gives the robot a sense of having been somewhere before — an accumulated experience that shapes present behavior. It's the lightest possible form of memory, but it makes the robot feel continuous rather than stateless.
 
 ---
 
+### 6. Behavior → POI affinity
+
+Behavior state shapes which POIs receive attention. The `POI_BEHAVIOR_AFFINITY` table applies a per-category multiplier to each POI's novelty score before selection. This makes the robot's gaze semantically coherent with its state — when listening, it locks onto people; when uncomfortable, it averts to objects.
+
+| Behavior | Person | Pet | Object |
+|----------|--------|-----|--------|
+| attentive | 2.5× | 1.2× | 0.5× |
+| listening | 3.0× | 0.5× | 0.3× |
+| searching | 2.0× | 1.5× | 1.0× |
+| uncomfortable | 0.3× | 1.0× | 2.0× |
+| curious | 1.0× | 1.2× | 1.2× |
+| idle | 1.0× | 1.0× | 1.0× |
+
+States not listed use equal weights across all categories.
+
+---
+
 ## Data flow
+
+The robot operates in a 3D world (Three.js scene). Attention is directed at world objects — POIs — not at 2D gaze coordinates. The drive system selects a POI; the full-body tracking system (head yaw/pitch, body yaw, eyes) takes over from there.
 
 ```
 External events
     │
     ▼
-Rule engine  ──→  pressure[state] for each behavior
+Rule engine  ──→  pressure[state] + look3D(x,y,z) actions
     │
     ▼
-Pressure scoring  ──→  winning state (with hysteresis)
+Pressure scoring  ──→  winning behavior state (with hysteresis)
     │
-    ▼
-Transition enforcer  ──→  legal transition sequence
+    ├──→  selectAttentionPOI()  ──→  POI_BEHAVIOR_AFFINITY × novelty weight → POI index
+    │         │
+    │         ▼
+    │     trackWorldPoint(poi.position)  ──→  head/body/eye spring physics
     │
     ▼
 setAttn() / setAffect()  ──→  Compositor
 ```
+
+`look3D(x, y, z, category)` is the bridge between the rule engine and the 3D world: when a rule fires a `look` action (e.g., a face detected event carrying a world position), it finds the nearest POI of the given category, repositions it to those coordinates, and sets it as the current attention target. The full-body tracking system then takes over.
 
 Micro-expressions bypass pressure scoring and go directly to `microExpress()` — they're reactive punctuation, not state changes.
 
@@ -138,4 +166,5 @@ This means the drive system can be disabled entirely (manual/WebSocket control t
 2. **Drive layer** — default pressure profiles, baseline temperament params
 3. **Rule engine** — event bus, rule definitions, pressure contributions
 4. **Transition enforcer** — route table for illegal transitions
-5. **Personal time** — spatial memory, dwell accumulation, novelty-shaped idle
+5. **Personal time** — per-POI familiarity + attention tracking, novelty-shaped idle
+6. **Behavior → POI affinity** — `POI_BEHAVIOR_AFFINITY` table, `selectAttentionPOI()` integration

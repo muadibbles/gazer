@@ -10,14 +10,17 @@ This document describes the categories, their drive mappings, and implementation
 
 Every environmental source produces either:
 - A **pressure contribution** — `addPressure('attentive', 0.4)` — a continuous push toward a state that decays naturally via novelty decay
-- A **drive event** — `emitDriveEvent('person_entered', { distance: 1.2 })` — a named event the rule engine can respond to with pressure + optional micro-expression
+- A **drive event** — `emitDriveEvent('person_entered', { x, y, z, distance: 1.2 })` — a named event the rule engine can respond to with pressure + optional `look3D` action
+
+When an event includes a 3D world position, the rule engine calls `look3D(x, y, z, category)`, which repositions the nearest matching POI to those coordinates and sets it as the current attention target. The full-body tracking system (head/body/eyes) takes over from there. When no 3D scene is active, `look3D` falls back to `triggerSaccade` using the projected 2D coordinates.
 
 Environmental inputs run as external processes (Python or Node.js) that observe sensors or system state and send WebSocket commands to the behavior engine. The engine doesn't need to know where the signal came from.
 
 ```
 Sensor / source         →  input process     →  WebSocket command
 Time of day             →  scheduler.py       →  { type: 'event', value: 'late_evening' }
-PIR motion              →  presence.py        →  { type: 'event', value: 'motion_detected' }
+PIR motion              →  presence.py        →  { type: 'event', value: 'motion_detected', x: 1.2, y: 0, z: 0.8 }
+Face detected           →  vision.py          →  { type: 'event', value: 'face_detected', x: 0.3, y: 1.6, z: 1.1 }
 Microphone amplitude    →  audio.py           →  { type: 'pressure', state: 'alert', amount: 0.3 }
 ```
 
@@ -29,7 +32,7 @@ Who is in the room, how many, and how close.
 
 | Condition | Drive event / pressure | Behavior |
 |-----------|----------------------|----------|
-| Person enters room | `person_entered` | `attentive` spike → look toward entry |
+| Person enters room | `person_entered` + `{ x, y, z }` | `attentive` spike → `look3D` toward entry point; nearest person POI repositioned |
 | Person leaves room | `person_left` | `searching` → eventually `idle` |
 | Person very close (<0.5m) | `person_close` | `uncomfortable` pressure; slight gaze aversion |
 | Person at comfortable distance (0.5–2m) | `person_present` | `attentive`/`engaged` |
@@ -78,7 +81,7 @@ The physical quality of the space.
 | Quiet room | — | lower blink rate, more `processing`/`resting` baseline |
 | Bright lighting | — | `attentive` baseline slightly elevated |
 | Dim lighting | — | `sleepy` pressure gradually builds |
-| Motion detected (PIR, no face) | `motion_detected` | `searching` spike; look toward motion |
+| Motion detected (PIR, no face) | `motion_detected` + `{ x, y, z }` | `searching` spike; `look3D` toward motion; nearest object POI repositioned |
 | No motion for extended period | `room_still` | `resting`/`sleepy` pressure builds |
 
 **Ambient sound** is the richest input. A microphone running continuously can distinguish:
