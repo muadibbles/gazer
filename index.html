@@ -4846,8 +4846,9 @@ function _updatePovCamera(s) {
 // Renders three Three.js cameras into viewport quadrants using scissor test.
 // Top-left quadrant is filled by the HTML face canvas overlay (not Three.js).
 function _renderFourUp() {
-  const W = renderer.domElement.width;
-  const H = renderer.domElement.height;
+  // Use logical (CSS) pixel dimensions — setViewport expects these, not device px
+  const W = container.clientWidth  || container.offsetWidth  || 600;
+  const H = container.clientHeight || container.offsetHeight || 500;
   const hw = Math.floor(W / 2);
   const hh = Math.floor(H / 2);
 
