@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GAZER v0.09</title>
+  <title>GAZER v0.10</title>
   <script type="importmap">
   {
     "imports": {
@@ -517,6 +517,26 @@ textarea.json-area {
 /* keep canvas rendering (texture source) but hide it visually */
 .stage.mode-3d > #canvas { opacity: 0; pointer-events: none; }
 
+/* POI overlay labels */
+.poi-label {
+  position: absolute;
+  pointer-events: none;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transform: translate(-50%, calc(-100% - 8px));
+  transition: opacity 0.3s;
+}
+.poi-label.person { background: rgba(255,136,68,0.80); border: 1px solid rgba(255,180,120,0.9); }
+.poi-label.pet    { background: rgba(60,200,100,0.80);  border: 1px solid rgba(100,240,140,0.9); }
+.poi-label.object { background: rgba(60,120,255,0.80);  border: 1px solid rgba(120,170,255,0.9); }
+
 /* Grid toggle */
 .grid-toggle-row {
   display: flex;
@@ -567,7 +587,7 @@ input[type="checkbox"].grid-cb:checked::after {
 
 <header>
   <h1><span class="status-dot"></span>Gazer</h1>
-  <span>v0.09 — robot eye behavior system</span>
+  <span>v0.10 — robot eye behavior system</span>
 </header>
 
 <div class="left-panel">
@@ -3715,40 +3735,8 @@ const POI_INIT = [
   { x: -0.9, y: 1.5, z: 3.8, s: 0.9, label: 'Front Door', category: 'object', color: 0xaa88ff },
 ];
 
-// Create a billboard text label sprite for a POI
-function makeLabelSprite(text, category) {
-  const w = 256, h = 64;
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  const cx = c.getContext('2d');
-
-  // Rounded background tinted by category
-  const tint = { person: '255,136,68', pet: '68,221,102', object: '68,136,255' }[category] || '200,200,200';
-  cx.clearRect(0, 0, w, h);
-  cx.fillStyle = `rgba(${tint},0.25)`;
-  cx.beginPath();
-  cx.roundRect(4, 4, w - 8, h - 8, 8);
-  cx.fill();
-  cx.strokeStyle = `rgba(${tint},0.7)`;
-  cx.lineWidth = 2;
-  cx.stroke();
-
-  // Label text
-  cx.font = 'bold 26px "Space Mono", monospace';
-  cx.fillStyle = '#ffffff';
-  cx.textAlign = 'center';
-  cx.textBaseline = 'middle';
-  cx.fillText(text, w / 2, h / 2);
-
-  const tex  = new THREE.CanvasTexture(c);
-  const mat  = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
-  const sprite = new THREE.Sprite(mat);
-  sprite.scale.set(1.4, 0.35, 1);
-  sprite.position.set(0, 0.55, 0); // float above the marker
-  return sprite;
-}
-
 const poiGeo = new THREE.OctahedronGeometry(0.30, 0); // 3× original size
+const _labelPos = new THREE.Vector3(); // pooled for label projection
 window.pois = POI_INIT.map(({ x, y, z, s, label, category, color }) => {
   const mat  = new THREE.MeshLambertMaterial({
     color,
@@ -3758,10 +3746,15 @@ window.pois = POI_INIT.map(({ x, y, z, s, label, category, color }) => {
   });
   const mesh = new THREE.Mesh(poiGeo, mat);
   mesh.position.set(x, y, z);
-  const sprite = makeLabelSprite(label, category);
-  mesh.add(sprite);
   scene.add(mesh);
-  return { mesh, salience: s, familiarity: 0, label, category };
+
+  // HTML overlay label — always screen-space above the marker, never draggable
+  const el = document.createElement('div');
+  el.className = `poi-label ${category}`;
+  el.textContent = label;
+  container.appendChild(el);
+
+  return { mesh, salience: s, familiarity: 0, label, category, el };
 });
 
 // ── Drag interaction ──
@@ -3971,13 +3964,16 @@ function render() {
     applyColors();
     renderer.setClearColor(new THREE.Color(window.colors?.stageBg ?? '#0a0a0f'));
 
-    // POI visibility and novelty glow
+    // POI markers + HTML label projection
     const pois = window.pois || [];
+    const cw = container.clientWidth, ch = container.clientHeight;
     pois.forEach((poi, i) => {
-      poi.mesh.visible = !!(p.showPOIs);
+      const show = !!(p.showPOIs);
+      poi.mesh.visible = show;
       const isActive = s.poiIdx === i;
       const fam = poi.familiarity;
-      // Active: full brightness white flash; familiar: dim own colour; novel: own colour at full
+
+      // Glow: active = white flash; novel = full own colour; familiar = dim
       if (isActive) {
         poi.mesh.material.emissive.setHex(0xffffff);
         poi.mesh.material.emissiveIntensity = 0.45;
@@ -3987,8 +3983,20 @@ function render() {
         poi.mesh.material.emissiveIntensity = Math.max(0.05, 1 - fam);
         poi.mesh.material.opacity = 0.45 + (1 - fam) * 0.45;
       }
-      // Slow spin
       poi.mesh.rotation.y += 0.008;
+
+      // Project world position → screen coords for the HTML label
+      // Offset slightly above the marker in world space before projecting
+      _labelPos.copy(poi.mesh.position);
+      _labelPos.y += 0.45;
+      _labelPos.project(camera);
+      const behind = _labelPos.z > 1; // clip labels behind the camera
+      const sx = (_labelPos.x * 0.5 + 0.5) * cw;
+      const sy = (-_labelPos.y * 0.5 + 0.5) * ch;
+      poi.el.style.display = (show && !behind) ? 'block' : 'none';
+      poi.el.style.left    = `${sx}px`;
+      poi.el.style.top     = `${sy}px`;
+      poi.el.style.opacity = isActive ? '1' : String(0.5 + (1 - fam) * 0.5);
     });
   }
 
