@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GAZER v0.12</title>
+  <title>GAZER v0.13</title>
   <script type="importmap">
   {
     "imports": {
@@ -602,7 +602,7 @@ input[type="checkbox"].grid-cb:checked::after {
 
 <header>
   <h1><span class="status-dot"></span>Gazer</h1>
-  <span>v0.12 — robot eye behavior system</span>
+  <span>v0.13 — robot eye behavior system</span>
 </header>
 
 <div class="left-panel">
@@ -1839,19 +1839,95 @@ function updatePoiFamiliarity(dt) {
   }
 }
 
-// Pick a POI to attend next, weighted toward novel (low familiarity) targets.
-// Sets state.poiIdx and state.attentionHoldTimer.
+// ─────────────────────────────────────────────
+//  WORLD ATTENTION — behavior→POI affinity + look3D
+// ─────────────────────────────────────────────
+
+// Per-behavior multipliers on POI category weights.
+// Shapes which kinds of targets get attention in each state.
+const POI_BEHAVIOR_AFFINITY = {
+  attentive:    { person: 2.5, pet: 1.2, object: 0.5 },
+  alert:        { person: 2.0, pet: 1.5, object: 0.8 },
+  searching:    { person: 2.0, pet: 1.5, object: 1.0 },
+  listening:    { person: 3.0, pet: 0.5, object: 0.3 },
+  speaking:     { person: 2.0, pet: 0.8, object: 0.5 },
+  engaged:      { person: 3.0, pet: 0.8, object: 0.3 },
+  uncomfortable:{ person: 0.3, pet: 1.0, object: 2.0 }, // averted gaze
+  curious:      { person: 1.0, pet: 1.2, object: 1.2 },
+  idle:         { person: 1.0, pet: 1.0, object: 1.0 },
+};
+
+// Direct the robot's full-body attention toward a 3D world position.
+// Finds the nearest POI of the given category, repositions it to (x,y,z)
+// if coordinates are supplied, and sets it as the current attention target.
+// Falls back to a 2D saccade when no 3D scene is active.
+function look3D(x, y, z, category) {
+  const pois = window.pois;
+  if (!pois || !pois.length) {
+    // 2D fallback — treat x/y as normalised gaze coords
+    if (x != null) triggerSaccade(
+      Math.max(-0.9, Math.min(0.9, +x)),
+      Math.max(-0.7, Math.min(0.7, +(y || 0)))
+    );
+    return;
+  }
+
+  let bestIdx = -1, bestScore = -Infinity;
+  for (let i = 0; i < pois.length; i++) {
+    const poi = pois[i];
+    if (category && poi.category !== category) continue;
+    let score;
+    if (x != null && z != null) {
+      // Position provided — prefer nearest POI of this category
+      const dx = poi.mesh.position.x - +x;
+      const dz = poi.mesh.position.z - +z;
+      score = -(dx * dx + dz * dz);
+    } else {
+      // No position — prefer most novel
+      score = 1 - poi.familiarity;
+    }
+    if (score > bestScore) { bestScore = score; bestIdx = i; }
+  }
+
+  // No match for category — retry without filter
+  if (bestIdx < 0 && category) { look3D(x, y, z, null); return; }
+  if (bestIdx < 0) return;
+
+  // Reposition if world coords were provided
+  if (x != null) {
+    const mesh = pois[bestIdx].mesh;
+    mesh.position.set(
+      +x,
+      y != null ? +y : mesh.position.y,
+      z != null ? +z : mesh.position.z
+    );
+  }
+
+  // Snap attention — shorter hold than an autonomous fixation
+  state.poiIdx = bestIdx;
+  state.attentionHoldTimer = Math.max(
+    state.attentionHoldTimer,
+    params.attentionHoldMin * 0.6
+  );
+}
+
+// Pick a POI to attend next.
+// Weighted by: novelty (1 - familiarity)^ptStrength × salience × behavior affinity.
 function selectAttentionPOI() {
   const pois = window.pois;
   if (!pois || !pois.length) { randomSaccade(); return; }
 
+  const affinity = POI_BEHAVIOR_AFFINITY[state.attn] || POI_BEHAVIOR_AFFINITY.idle;
+
   const total = pois.reduce((s, p) => {
-    return s + Math.pow(Math.max(0.01, 1 - p.familiarity), params.ptStrength) * p.salience;
+    const catMult = affinity[p.category] ?? 1.0;
+    return s + Math.pow(Math.max(0.01, 1 - p.familiarity), params.ptStrength) * p.salience * catMult;
   }, 0);
 
   let pick = Math.random() * total;
   for (let i = 0; i < pois.length; i++) {
-    const w = Math.pow(Math.max(0.01, 1 - pois[i].familiarity), params.ptStrength) * pois[i].salience;
+    const catMult = affinity[pois[i].category] ?? 1.0;
+    const w = Math.pow(Math.max(0.01, 1 - pois[i].familiarity), params.ptStrength) * pois[i].salience * catMult;
     pick -= w;
     if (pick <= 0) {
       state.poiIdx = i;
@@ -1860,7 +1936,6 @@ function selectAttentionPOI() {
       return;
     }
   }
-  // Fallback to last
   state.poiIdx = pois.length - 1;
   state.attentionHoldTimer = params.attentionHoldMin;
 }
@@ -3136,39 +3211,130 @@ function updateDrive(dt) {
   }
 }
 
-// Emit a named event — fires matching rules and built-in responses
+// ─────────────────────────────────────────────
+//  RULE ENGINE — declarative event → response table
+// ─────────────────────────────────────────────
+//
+// Each rule is an array of actions executed in order when the event fires.
+// Action types:
+//   { pressure, add }          — addPressure(pressure, add * scale)
+//   { action:'look3D', cat }   — look3D(data.x, data.y, data.z, cat)
+//   { action:'setAttn', value }— setAttn(value)
+//   { micro, dur }             — microExpress(micro, dur)
+//
+// Event data is passed through; rules can reference data.x / data.y / data.z
+// for 3D position, and data.scale (0..1) to modulate pressure contributions.
+
+const ruleTable = {
+  // ── Presence ──
+  face_detected:   [
+    { pressure: 'attentive',     add: 0.60 },
+    { action: 'look3D',          cat: 'person' },
+  ],
+  face_lost:       [
+    { pressure: 'searching',     add: 0.50 },
+  ],
+  person_entered:  [
+    { pressure: 'attentive',     add: 0.70 },
+    { pressure: 'alert',         add: 0.30 },
+    { action: 'look3D',          cat: 'person' },
+  ],
+  person_left:     [
+    { pressure: 'searching',     add: 0.50 },
+    { pressure: 'attentive',     add: -0.30 },
+  ],
+  person_close:    [
+    { pressure: 'uncomfortable', add: 0.40 },
+  ],
+  crowd_detected:  [
+    { pressure: 'searching',     add: 0.30 },
+    { pressure: 'confused',      add: 0.20 },
+  ],
+  room_empty:      [
+    { pressure: 'sleepy',        add: 0.30 },
+    { pressure: 'attentive',     add: -0.20 },
+  ],
+  room_still:      [
+    { pressure: 'resting',       add: 0.20 },
+  ],
+
+  // ── Motion / environment ──
+  motion_detected: [
+    { pressure: 'searching',     add: 0.40 },
+    { action: 'look3D',          cat: 'object' },
+  ],
+  startle:         [
+    { pressure: 'alert',         add: 0.90 },
+    { micro: 'alert',            dur: 0.12  },
+  ],
+  loud_sound:      [
+    { pressure: 'alert',         add: 0.40 },
+    { micro: 'alert',            dur: 0.10  },
+  ],
+
+  // ── Conversation ──
+  speech_start:    [
+    { pressure: 'listening',     add: 0.70 },
+    { pressure: 'speaking',      add: -0.20 },
+  ],
+  speech_end:      [
+    { pressure: 'listening',     add: -0.30 },
+    { pressure: 'idle',          add: 0.20  },
+  ],
+  long_silence:    [
+    { pressure: 'waiting',       add: 0.20  },
+  ],
+  wake_word:       [
+    { pressure: 'alert',         add: 0.80  },
+    { pressure: 'listening',     add: 0.50  },
+    { action: 'look3D',          cat: 'person' },
+  ],
+
+  // ── System / affect ──
+  error:           [
+    { pressure: 'uncomfortable', add: 0.50 },
+    { micro: 'uncomfortable',    dur: 0.25  },
+  ],
+  success:         [
+    { pressure: 'pleased',       add: 0.40 },
+    { micro: 'pleased',          dur: 0.30  },
+  ],
+  low_power:       [
+    { pressure: 'sleepy',        add: 0.40 },
+  ],
+  startup:         [
+    { action: 'setAttn',         value: 'waking' },
+  ],
+};
+
+// Emit a named event — runs all matching rules from ruleTable
 function emitDriveEvent(eventName, data) {
   data = data || {};
-  switch (eventName) {
-    case 'face_detected':
-      addPressure('attentive', 0.50);
-      if (data.x != null) triggerSaccade(
-        Math.max(-0.9, Math.min(0.9, +data.x)),
-        Math.max(-0.7, Math.min(0.7, +(data.y || 0)))
-      );
-      break;
-    case 'face_lost':
-      addPressure('searching', 0.40);
-      break;
-    case 'speech_start':
-      addPressure('listening', 0.60);
-      break;
-    case 'speech_end':
-      addPressure('idle', 0.20);
-      break;
-    case 'startle':
-      addPressure('alert', 0.30);
-      microExpress('alert', 0.15);
-      break;
-    case 'error':
-      addPressure('uncomfortable', 0.40);
-      microExpress('uncomfortable', 0.25);
-      break;
-    case 'success':
-      addPressure('pleased', 0.35);
-      microExpress('pleased', 0.25);
-      break;
+  const scale = data.scale != null ? Math.max(0, Math.min(2, +data.scale)) : 1;
+  const rules  = ruleTable[eventName];
+
+  if (rules) {
+    for (const rule of rules) {
+      if (rule.pressure != null) {
+        addPressure(rule.pressure, rule.add * scale);
+
+      } else if (rule.action === 'look3D') {
+        look3D(
+          data.x  != null ? +data.x  : null,
+          data.y  != null ? +data.y  : null,
+          data.z  != null ? +data.z  : null,
+          rule.cat || null
+        );
+
+      } else if (rule.action === 'setAttn') {
+        setAttn(rule.value);
+
+      } else if (rule.micro != null) {
+        microExpress(rule.micro, rule.dur);
+      }
+    }
   }
+
   logEvent(`event: ${eventName}`);
 }
 
