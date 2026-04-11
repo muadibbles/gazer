@@ -61,18 +61,14 @@
 ## Up next
 
 ### Input pipeline
-Connect the rule engine to real sensors. The rule engine is ready — it just needs events fired at it.
-
-- [ ] **Face detection** — Python process: camera → MediaPipe → 3D position estimate → fires `face_detected {x,y,z}`; person POI tracks a real face
-- [ ] **Audio process** — microphone amplitude → `loud_sound` / `startle`; voice activity detection → `speech_start` / `speech_end`
-- [ ] **Time-of-day scheduler** — shifts drive profile weights on a day curve (morning alert, afternoon steady, evening sleepy)
+- [x] **Face detection** — `face_detect.py`; webcam → MediaPipe Face Detection → 3D world position estimate → `face_detected` + `look3D` track at 5 Hz + `face_lost` (debounced); `--hfov`, `--camera`, `--no-display`
+- [x] **Audio process** — `audio.py`; mic → RMS → `speech_start` / `speech_end` VAD state machine; `startle` on sudden spike; `loud_sound` on threshold; continuous `amplitude` param at 20 Hz for mouth sync; `--device`, `--threshold`, `--list-devices`
+- [x] **Time-of-day scheduler** — `time_scheduler.py`; day curve: morning (curious↑ alert↑), day (neutral), evening (idle↑), night (sleepy↑ resting↑); fires pressure commands every 2 min; `--interval`, `--dry-run`
 
 ### State broadcast
-The robot only receives commands today. It needs to push state out for deployment and recording.
-
-- [ ] **WebSocket out channel** — engine serializes full state each tick, broadcasts to all subscribers
-- [ ] **Recorder** — subscriber that appends state packets to JSONL for session replay
-- [ ] **Browser as pure renderer** — receives state packets instead of computing them locally (prerequisite for Pi deployment)
+- [x] **WebSocket out channel** — `wsBroadcastState()` at 20 Hz; `type: "state"` packet with full attn/affect/behavior/gaze/drive/task/pois
+- [x] **Recorder** — `recorder.py`; connects to relay, filters `type: "state"`, appends JSONL with auto-reconnect
+- [x] **Browser as pure renderer** — Renderer Mode toggle in WebSocket panel; engine pauses, incoming state packets hydrate; motion cascade + 3D springs smooth 20 Hz → 60 fps
 
 ### Engine extraction
 Split `index.html` into deployable modules. Prerequisite for hardware targets.
