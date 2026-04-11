@@ -2,218 +2,269 @@
 
 An exploration of the 12 principles of animation applied to robotics — using a 3D robot with expressive eyes as the test subject. The goal is to understand what makes a robot feel alive rather than mechanical: how motion, timing, and expression create the impression of weight, intention, and personality. A secondary thread is robot personality implementation: how independent behavioral layers, state machines, and a drive system can give a robot a coherent inner life that shapes how it moves and responds over time. Browser-based, designed to eventually run on embedded hardware (Raspberry Pi, Jetson, etc).
 
------
+---
+
+## Quick start
+
+```bash
+# 1. Start the relay server
+python3 server.py
+
+# 2. Open the sim in a browser
+open index.html          # or: python3 -m http.server 8080
+
+# 3. Run the synthetic simulator to see the robot react immediately
+python3 simulate.py
+```
+
+That's enough to watch the full system in action — no camera or microphone needed.
+
+---
 
 ## What it does
 
 - **Smooth arc saccades** — eye movement follows quadratic bezier curves, not linear paths, so it feels alive
-- **Compositor** — two independent layers: *gaze* (controls saccade pattern) and *expression* (controls lids, brows, mouth); any behavior can be used as either template, mixed freely — see [Expressive Response](docs/expressive-response.md)
+- **Compositor** — two independent layers: *gaze* (controls saccade pattern) and *expression* (controls lids, brows, mouth); any behavior can be used as either layer, mixed freely
 - **Transition blending** — each state defines its own blend-in duration and easing curve; pair-specific overrides for dramatic shifts; `interrupted` snaps in and auto-returns after 0.5s
-- **Easing library** — `inOutCubic`, `outBack`, `outQuart`, `inOutQuint` built in, easy to extend
 - **Blink system** — natural blink timing per behavior, with anticipation and follow-through spring
-- **3D robot body** — Three.js scene with physical robot; face canvas mapped as texture
+- **3D robot body** — Three.js scene; face canvas mapped as a texture on the head
 - **Spring physics** — head and body rotation use underdamped spring dynamics: natural ease-in, ease-out, and slight overshoot on every movement
 - **Arc motion in 3D** — head tilts into yaw turns, body leans during rotation; motion traces curves through space, not flat angular sweeps
-- **Draggable gaze target** — yellow ball in the 3D scene; drag it and the robot tracks it with a 75/25 head/eye split; reverts to idle wander after configurable timeout
-- **Click to look** — click anywhere on canvas to trigger a manual saccade
+- **Multi-camera views** — Face / POV / Ceiling / Perspective and 4-up grid; POV camera mounts at the robot eye and shows POI labels
+- **Drive system** — pressure-based behavior selection; rule engine fires on events (`face_detected`, `speech_start`, `startle`, etc.); novelty decay prevents getting stuck
+- **Task system** — queued directed interactions; utility (transactional) and social (open-ended) modes; interrupt support
+- **World model** — 8 named POIs (Person, Child, Cat, Dog, TV, Window, Food Bowl, Front Door); draggable in 3D scene; familiarity and attention tracking per POI
+- **State broadcast** — engine serializes full state at 20 Hz over WebSocket; Renderer Mode lets a second browser tab display state received from the network rather than computing it locally
 
------
+---
 
 ## Behaviors
 
 17 behaviors across five groups: Classic, Attention, Conversational, Affective, and Operational. Each defines gaze parameters (range, speed, easing) and expression parameters (lids, brows, mouth, blink rate) — any behavior can be used as a template for either compositor layer independently.
 
-See [docs/behaviors.md](docs/behaviors.md) for the full reference, pair-specific transition overrides, and notes on combining layers.
+See [docs/behaviors.md](docs/behaviors.md) for the full reference.
 
------
-
-## Parameters
-
-All exposed in the UI panel:
-
-|Param              |Description                                                  |
-|-------------------|-------------------------------------------------------------|
-|`arcCurvature`     |How much the gaze arc bends (0 = straight line)              |
-|`gazeSpeed`        |Base speed multiplier for all saccades                       |
-|`saccadeJitter`    |Adds slight randomness to target positions                   |
-|`lidOpenness`      |How wide the eye opens (overridden by behavior)              |
-|`pupilSize`        |Pupil radius relative to iris                                |
-|`blinkInterval`    |Seconds between blinks (modified by behavior)                |
-|`transitionDur`    |Default compositor blend duration (overridden per state)     |
-|`headRotationMax`  |Degrees — max 3D head yaw                                    |
-|`head3DSpeed`      |Head spring stiffness scale (higher = snappier)              |
-|`headSpringDamp`   |Head spring damping (lower = more overshoot)                 |
-|`headArcFactor`    |Head tilt into yaw turns (arc motion, 0 = off)               |
-|`bodyRotationMax`  |Degrees — max 3D body yaw                                    |
-|`body3DSpeed`      |Body spring stiffness scale                                  |
-|`bodySpringDamp`   |Body spring damping                                          |
-|`bodyArcFactor`    |Body lean into rotation (arc motion, 0 = off)                |
-|`ballTrackTimeout` |Seconds before reverting to idle wander after drag ends      |
-|`squashStretch`    |Eye deformation amount during saccades (0 = off)             |
-
------
+---
 
 ## Architecture
 
 ```
 Compositor
-├── attn layer  → GazeBehavior   (gazeRadius, speedMult, easeFn)
-└── affect layer → ExpressionBehavior  (lids, brows, mouth, blinkMult)
-    └── per-state: enterDur, enterEase, maxHold
-    └── per-pair: transTable overrides
+├── attn layer   → GazeBehavior       (gazeRadius, speedMult, easeFn)
+└── affect layer → ExpressionBehavior (lids, brows, mouth, blinkMult)
 
 GazeSaccade (bezier arc engine)
 ├── anticipation phase (counter-move wind-up)
-├── main arc phase (quadratic bezier)
-└── follow-through (damped spring overshoot)
+├── main arc phase     (quadratic bezier)
+└── follow-through     (damped spring overshoot)
 
-BlinkController
-├── anticipation
-└── follow-through (spring)
+Drive system
+├── pressure vector    — per-behavior float, decays toward driveProfile
+├── rule engine        — declarative event → [pressure, look3D, micro, ...] table
+├── task queue         — utility + social modes, interrupt support
+└── POI world model    — familiarity, attention, 3D positions, affordances
 
 BodyController (Three.js)
-├── headGroup — underdamped spring yaw/pitch + arc roll tilt
-├── robot body — spring yaw + arc pitch lean
-└── ball — draggable gaze target, triggers 75/25 head/eye tracking
+├── headGroup          — underdamped spring yaw/pitch + arc roll tilt
+├── robot body         — spring yaw + arc pitch lean
+└── ball               — draggable gaze target; Y-handle for height
 
-EyeRenderer (canvas → THREE.CanvasTexture)
-├── squash & stretch during saccades
-└── behavior expression: lids, brows, mouth, nose
+Cameras
+├── face cam           — 2D canvas overlay (top-left in 4-up)
+├── POV cam            — mounts at robot eye, gaze-direction frustum
+├── ceiling cam        — top-down, pan+zoom only
+└── perspective cam    — orbit-controlled
 ```
 
-The compositor is designed for external driving — each layer can be set independently via WebSocket (`attn`, `affect` message types) to combine gaze patterns with emotional expressions freely.
+---
 
------
+## Scripts
+
+All scripts connect to `server.py` as WebSocket clients. Override the server URL with `WS_URL=ws://host:port`.
+
+### `server.py` — relay server
+
+Forwards every message to every other connected client. All scripts and browser tabs connect here.
+
+```bash
+python3 server.py           # default port 8765
+python3 server.py 9000      # custom port
+```
+
+### `send.py` — one-shot command sender
+
+Send a single command and disconnect. Useful for scripting and quick tests.
+
+```bash
+python3 send.py behavior attentive
+python3 send.py event face_detected x=-1.2 y=1.5 z=3.0
+python3 send.py event startle scale=1.5
+python3 send.py look3D -1.2 1.5 3.0 cat=person
+python3 send.py pressure curious 0.6
+python3 send.py micro confused 0.3
+python3 send.py blink
+python3 send.py param gazeSpeed 2.0
+```
+
+Run `python3 send.py` with no arguments for the full command reference.
+
+### `states.py` — scenario runner and interactive REPL
+
+Fire named scenarios or issue commands interactively.
+
+```bash
+python3 states.py                       # interactive REPL
+python3 states.py scenario dog_hungry   # run a named scenario
+python3 states.py list                  # list all scenarios and POI indices
+```
+
+REPL commands: `scenario <name>`, `task <src> <tgt> <action> [mode]`, `complete`, `event <name> [k=v …]`, `speak [peak] [duration]`, `poi`, `list`.
+
+Named scenarios: `dog_hungry`, `dog_play`, `cat_hello`, `person_utility`, `person_social`, `kid_play`, `multi_task`, `interrupt`, `startle_recovery`, `arrival_and_greet`, `low_power`, `speaking_test`.
+
+### `simulate.py` — synthetic sensor simulator
+
+Generates realistic fake sensor events — no webcam or microphone needed. A virtual person enters the scene, wanders on an organic path, speaks periodically, then leaves. Ambient sounds fire independently.
+
+```bash
+python3 simulate.py                 # continuous, real-time
+python3 simulate.py --fast          # 3× compressed time
+python3 simulate.py --once          # one visit cycle then exit
+python3 simulate.py --seed 42       # reproducible sequence
+python3 simulate.py --speed 2       # explicit time multiplier
+```
+
+### `recorder.py` — session recorder
+
+Connects to the relay, filters `type: "state"` packets, and appends each to a timestamped JSONL file. Auto-reconnects with exponential backoff.
+
+```bash
+python3 recorder.py                 # writes to ./recordings/
+python3 recorder.py /tmp/sessions   # custom output directory
+```
+
+Output: `<dir>/session_YYYYMMDD_HHMMSS.jsonl`
+
+### `replay.py` — session replay
+
+Plays back a recorded JSONL file through the relay at the original cadence. Open a browser tab with Renderer Mode enabled to display the playback.
+
+```bash
+python3 replay.py recordings/session_20250411_143022.jsonl
+python3 replay.py session.jsonl --speed 2       # double speed
+python3 replay.py session.jsonl --loop          # repeat until Ctrl-C
+```
+
+### `face_detect.py` — webcam face detection
+
+Tracks faces via webcam, estimates 3D world position, and fires `face_detected` / `look3D` / `face_lost` / `person_close` events. Works with any webcam including a laptop's built-in camera.
+
+```bash
+pip install mediapipe opencv-python websockets
+
+python3 face_detect.py                  # default webcam, display window
+python3 face_detect.py --camera 1       # camera index 1
+python3 face_detect.py --no-display     # headless
+python3 face_detect.py --hfov 90        # set camera horizontal FOV
+```
+
+The depth estimate uses the face bounding box width. Tune `--hfov` to match your camera for accurate distances.
+
+### `audio.py` — microphone input pipeline
+
+Captures mic input, runs a VAD state machine, and fires `speech_start` / `speech_end` / `loud_sound` / `startle` events. Sends a continuous `amplitude` parameter at 20 Hz for real-time mouth sync.
+
+```bash
+pip install sounddevice numpy websockets
+
+python3 audio.py                        # default mic
+python3 audio.py --list-devices         # print available audio devices
+python3 audio.py --device 2             # use device index 2
+python3 audio.py --threshold 0.03       # override speech onset threshold
+```
+
+### `time_scheduler.py` — time-of-day drive scheduler
+
+Shifts the robot's baseline temperament throughout the day by injecting pressure commands on a day curve. Fires every 2 minutes; effects decay naturally between injections.
+
+| Period | Hours | Effect |
+|---|---|---|
+| Morning | 05–09 | curious↑, alert↑ |
+| Day | 09–17 | neutral baseline |
+| Evening | 17–21 | idle↑ |
+| Night | 21–05 | sleepy↑, resting↑ |
+
+```bash
+python3 time_scheduler.py               # run continuously
+python3 time_scheduler.py --interval 60 # inject every 60s
+python3 time_scheduler.py --dry-run     # print without connecting
+```
+
+---
+
+## Running the full stack
+
+```bash
+# Terminal 1 — relay
+python3 server.py
+
+# Terminal 2 — open sim
+open index.html
+
+# Pick any combination of inputs:
+python3 simulate.py          # synthetic (no hardware)
+python3 face_detect.py       # real webcam
+python3 audio.py             # real microphone
+python3 time_scheduler.py    # day curve (always safe to run)
+
+# Optional: record the session
+python3 recorder.py
+
+# Later: replay it in Renderer Mode
+python3 replay.py recordings/session_*.jsonl
+```
+
+---
+
+## Parameters
+
+All exposed in the UI panel:
+
+| Param | Description |
+|---|---|
+| `arcCurvature` | How much the gaze arc bends (0 = straight line) |
+| `gazeSpeed` | Base speed multiplier for all saccades |
+| `saccadeJitter` | Adds slight randomness to target positions |
+| `lidOpenness` | How wide the eye opens (overridden by behavior) |
+| `pupilSize` | Pupil radius relative to iris |
+| `blinkInterval` | Seconds between blinks (modified by behavior) |
+| `transitionDur` | Default compositor blend duration |
+| `headRotationMax` | Degrees — max 3D head yaw |
+| `head3DSpeed` | Head spring stiffness scale (higher = snappier) |
+| `headSpringDamp` | Head spring damping (lower = more overshoot) |
+| `headArcFactor` | Head tilt into yaw turns (0 = off) |
+| `bodyRotationMax` | Degrees — max 3D body yaw |
+| `body3DSpeed` | Body spring stiffness scale |
+| `bodySpringDamp` | Body spring damping |
+| `bodyArcFactor` | Body lean into rotation (0 = off) |
+| `ballTrackTimeout` | Seconds before reverting to idle after drag |
+| `squashStretch` | Eye deformation amount during saccades (0 = off) |
+
+---
 
 ## 12 Principles of Animation
 
-From Johnston & Thomas, *The Illusion of Life* (Disney, 1981) — the design checklist for the project. Most principles are implemented; exaggeration and overlap have the most room to grow.
+From Johnston & Thomas, *The Illusion of Life* (Disney, 1981) — the design checklist for the project.
 
-See [docs/animation-principles.md](docs/animation-principles.md) for the full status table and notes on where to push further.
+See [docs/animation-principles.md](docs/animation-principles.md) for the full status table.
 
------
+---
 
 ## Roadmap
 
-### UI & Layout
-- [x] Multiple eyes (stereo)
-- [x] Move event log to opposite side of page
-- [x] 3-column layout — canvas centered between left event log panel and right controls panel
-- [x] Visibility toggles — checkboxes to show/hide pupils, eyelids, brows, mouth
-- [x] Config persistence — save/load/export via localStorage
-- [x] Color controls — floor, robot body, wheels
+See [docs/roadmap.md](docs/roadmap.md).
 
-### Eye Shape & Controls
-- [x] Eye rotation mirroring — left/right eyes tilt opposite directions
-- [x] Pupil spacing — independent horizontal offset per eye, child of eye spacing
-- [x] Brow spacing — independent horizontal position, child of eye spacing
-- [x] Lid rotation — tilt lids independently of eye rotation
-
-### Face Anatomy
-- [x] Eyelids — oval matching eye shape with curved crop; controls for rotation, curvature, translation, color
-- [x] Brows — shape, taper (inner/outer ends, round caps), and animation controls
-- [x] Mouth — shape, taper, and animation controls
-- [x] Nose — bridge and nostril shape controls
-- [x] Better blink mechanics — multi-stage lid travel (squint→close→hold→open), lid occlusion with ⌣ crescent, pupil retains shape
-- [ ] Phonemes — mouth shapes mapped to phoneme groups (A/E/I/O/U, consonants)
-- [ ] Lip sync — drive phonemes from audio analysis or text-to-speech timing data
-
-### Visual Feedback
-- [x] Arc trail visualization — line showing recent pupil path, with visibility toggle and memory duration control
-- [x] Saccade target indicator — show where the next gaze point will land before the eye moves there
-- [x] Planning grid overlay — center crosshair, grid, and no-go border zone for layout reference
-- [x] Anticipation & follow-through — brief wind-up before saccade fires, slight overshoot/settle on landing
-- [ ] Bezier arc preview — ghost the full arc path before a saccade executes
-- [ ] Spring force vectors — arrows on head/body showing current spring acceleration
-- [ ] Velocity heatmap — overlay showing dwell density (where the eye spends the most time)
-- [ ] Behavior transition flash — subtle color pulse when behavior switches
-- [ ] Blink countdown indicator — visual cue showing time until next blink (dev tool)
-- [ ] Clipping warning — highlight when pupil travel pushes near the iris edge
-- [ ] FPS counter — frame rate display, useful for hardware porting
-- [ ] Frame timing graph — sparkline of frame render times
-
-### Conversational Robot States
-- [x] Attention states — idle, alert, searching
-- [x] Conversational states — listening, processing, speaking, waiting
-- [x] Affective states — engaged, confused, pleased, uncomfortable
-- [x] Operational states — waking, resting, interrupted
-- [x] State compositor — two independent layers (gaze + expression); any behavior usable as either template; mixed freely; live status display
-- [x] State machine — per-state blend duration + easing (`interrupted` = instant snap, `resting` = 1.5s melt); pair-specific overrides (e.g. `pleased→uncomfortable` = 0.9s reluctant shift); `maxHold` auto-return; live progress bar
-- [x] Micro-expressions — brief flashes of affect (200ms) that don't fully commit, then return to base state; 5 named presets (startle, wince, brighten, doubt, drift); independent hold timer; WebSocket `micro` command
-
-### Drive System
-
-See [docs/drive-system.md](docs/drive-system.md) for the full design.
-
-- [x] Pressure/scoring — per-state pressure vector, novelty decay on active state, hysteresis threshold, `updateDrive()` each frame
-- [x] Drive layer — `driveProfile` defines resting pressure per state (baseline temperament); idle/curious oscillation from novelty decay
-- [x] Rule engine — `emitDriveEvent()` with built-in events (face_detected, speech_start, startle, etc.); `addPressure()` for direct injection; WebSocket `event` and `pressure` commands
-- [x] Transition enforcer — `transEnforcer` table reroutes illegal drive-originated jumps through intermediate states (e.g. `resting→anything` goes via `waking`); blend-guard prevents drive from interrupting in-progress transitions
-- [ ] Personal time — spatial memory of dwell history shapes idle gaze over a session
-
-### Environmental Triggers
-
-See [docs/environmental-triggers.md](docs/environmental-triggers.md) for the full design and implementation notes.
-
-- [ ] Time of day — scheduler adjusts drive profile weights through a day/night curve; time-since-last-interaction builds restlessness
-- [ ] Presence detection — PIR or camera; person enters/leaves room triggers `attentive`/`searching`/`resting` pressure cycles
-- [ ] Ambient audio — microphone amplitude envelope drives arousal level; transients fire `startle` events
-- [ ] System state — CPU load, battery, network status, errors feed drive events with no extra hardware
-- [ ] Proximity — distance to nearest person shapes `comfortable`/`uncomfortable` pressure and gaze aversion
-- [ ] Calendar / schedule context — meeting, focus, idle modes shift drive profile baseline
-
-### Animation Hierarchy
-- [x] Global face translation — subtle whole-face shift toward gaze target, parent transform above gaze
-- [x] Motion cascade — layered delays: pupils → face shift → head turn → body shift, each with independent speed and amount
-- [x] Squash & stretch — eye shape deforms slightly during fast saccades
-- [ ] Fix squash & stretch — two issues: (1) deformation scales the whole eye rather than just iris/pupil (same root issue as the old blink scaling trick); (2) fires regardless of blink state, so a saccade during a blink leaves residual spring deformation that's still decaying when the eye reopens
-- [x] Spring physics — head/body rotation uses underdamped spring dynamics; natural ease-in/out and slight overshoot on every movement
-- [x] Arc motion — head tilts into yaw turns, body leans during rotation; 3D motion traces curves through space
-- [x] Principles off switch — button zeros arc curvature, squash/stretch, anticipation, follow-through, arc tilt/lean, cascade, blink anticipation/overshoot, and forces linear easing + critically-damped springs; snapshot restores originals on toggle-back
-
-### API & Integration
-- [x] WebSocket API — relay server + browser client; external processes send `behavior`, `attn`, `affect`, `param`, `look`, `blink`, `color`, `event`, `pressure`, `micro` commands
-- [x] Object tracking — draggable ball in 3D scene; robot tracks with 75/25 head/eye split; configurable timeout reverts to idle wander
-- [ ] Gaze vector export — time-stamped gaze vectors exported as CSV/JSON for external analysis
-- [ ] Gaze-based UI interaction — dwell-time selection for UI elements
-
-### Robot Deployment
-
-See [docs/robot-architecture.md](docs/robot-architecture.md) for the full design: state broadcast architecture, telemetry sim view, recorder/playback, hardware adapters, and input pipeline.
-
-**Engine & architecture**
-- [ ] Engine extraction — split `index.html` into `engine.js` + renderer modules; prerequisite for all deployment work
-- [ ] State broadcast — engine publishes full state packet to WebSocket each tick; all subscribers receive identical stream
-- [ ] Browser telemetry mode — browser receives state rather than computing it; cannot drift from robot reality
-
-**Observability**
-- [ ] Recorder — WebSocket subscriber writes JSONL state log; no logic, just timestamps and packets
-- [ ] Playback — feed recorded JSONL back into browser renderer; scrub-able, speed-adjustable
-
-**Hardware output**
-- [ ] OLED adapter — re-implement `EyeRenderer` as 1-bit pixel buffer writer for SSD1306/SH1106 via i2c
-- [ ] Servo adapter — map `gazeX/Y`, `lidOpenness`, `head3DYaw/Pitch` to servo positions via pigpio or serial
-- [ ] Raspberry Pi deployment — Pi 4/Jetson full stack (Node.js engine + Chromium kiosk); Pi Zero headless
-
-**Input pipeline**
-- [ ] Audio pipeline — mic amplitude → blink rate/processing affect; wake word → alert+listening; silence → waiting
-- [ ] Face tracking — camera → face position events → drive system (`face_detected`, `face_lost`)
-- [ ] Head pose integration — external pitch/yaw/roll inputs offset gaze target
-- [ ] LLM integration — inference state → drive events (`speech_start`, `speech_end`, `uncertain`)
-
------
-
-## Running locally
-
-Just open `index.html` in a browser. No build step needed.
-
-```bash
-open index.html
-# or
-python3 -m http.server 8080
-```
-
------
+---
 
 ## License
 
