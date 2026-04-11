@@ -37,12 +37,14 @@ Interactive commands:
 
 Examples:
     scenario dog_hungry
+    scenario speaking_test
     task 0 3 feed utility
     task 0 1 play social
     event dog_begging
     event startle scale=1.5
     event face_detected x=-1.8 y=1.5 z=3.0
     complete
+    speak 0.8                                Pulse amplitude once
 """
 
 import asyncio
@@ -180,6 +182,26 @@ SCENARIOS = {
             (4.0, {"type": "event", "value": "room_empty"}),
         ],
     },
+    "speaking_test": {
+        "desc": "Simulate a short speaking burst — amplitude envelope drives the mouth",
+        "steps": [
+            (0.0, {"type": "attn",  "value": "speaking"}),
+            (0.0, {"type": "affect","value": "speaking"}),
+            # ramp up
+            (0.1, {"type": "params","data": {"amplitude": 0.3}}),
+            (0.2, {"type": "params","data": {"amplitude": 0.7}}),
+            (0.3, {"type": "params","data": {"amplitude": 0.9}}),
+            (0.2, {"type": "params","data": {"amplitude": 0.6}}),
+            (0.2, {"type": "params","data": {"amplitude": 0.8}}),
+            (0.3, {"type": "params","data": {"amplitude": 0.4}}),
+            (0.2, {"type": "params","data": {"amplitude": 0.7}}),
+            (0.2, {"type": "params","data": {"amplitude": 0.2}}),
+            # ramp down
+            (0.4, {"type": "params","data": {"amplitude": 0.0}}),
+            (0.5, {"type": "attn",  "value": "idle"}),
+            (0.5, {"type": "affect","value": "idle"}),
+        ],
+    },
 }
 
 # ── Transport ────────────────────────────────────────────────────────────────
@@ -306,6 +328,23 @@ async def repl():
             msg = {"type": "event", "value": "task_complete"}
             try:
                 await send_one(msg)
+            except OSError as e:
+                print(f"connection failed: {e}")
+
+        elif cmd == "speak":
+            # Quick amplitude pulse: speak [peak=0.8] [duration=1.0]
+            peak = float(parts[1]) if len(parts) > 1 else 0.8
+            dur  = float(parts[2]) if len(parts) > 2 else 1.0
+            steps = 8
+            try:
+                for i in range(steps):
+                    t = i / (steps - 1)
+                    # simple sine envelope
+                    import math
+                    amp = peak * math.sin(t * math.pi)
+                    await send_one({"type": "params", "data": {"amplitude": round(amp, 3)}})
+                    await asyncio.sleep(dur / steps)
+                await send_one({"type": "params", "data": {"amplitude": 0.0}})
             except OSError as e:
                 print(f"connection failed: {e}")
 

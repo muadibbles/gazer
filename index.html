@@ -999,6 +999,10 @@ const params = {
   mouthThickness:  10,
   mouthCurve:      0,    // pixels: positive = smile, negative = frown
   mouthTaper:      0,    // 0 = uniform, 1 = tapers to points at corners
+  mouthOpenMax:    22,   // px height of fully-open mouth at amplitude=1
+
+  // ── Speaking ──
+  amplitude:       0,    // 0..1, set externally (speech amplitude or TTS envelope)
 
   // ── Lids ──
   upperLidPos:     0,    // 0 = fully open, 1 = closed to center
@@ -1112,7 +1116,8 @@ const colors = {
   lidColor:   '#131318',
   browColor:  '#ffffff',
   noseColor:  '#ffffff',
-  mouthColor: '#ffffff',
+  mouthColor:     '#ffffff',
+  mouthFillColor: '#111118',  // interior of open mouth when speaking
   trailColor: '#ff4444',
   stiColor:   '#4af7c4',
   floorColor:  '#18181f',
@@ -1229,7 +1234,8 @@ const state = {
   now: 0,           // running time in seconds
 
   // Blink reaction (smoothed blink.t for facial reactions)
-  blinkReact: 0,
+  blinkReact:        0,
+  amplitudeSmoothed: 0,  // smoothed params.amplitude, ~80ms response for speech sync
 
   // Motion cascade offsets (all compound in draw)
   faceX: 0, faceY: 0,
@@ -2368,7 +2374,8 @@ function update(dt) {
   updateBlink(dt);
 
   // Smooth blink reaction for brow/mouth follow
-  state.blinkReact += (state.blink.t - state.blinkReact) * Math.min(1, dt * params.blinkReactDamp);
+  state.blinkReact        += (state.blink.t        - state.blinkReact)        * Math.min(1, dt * params.blinkReactDamp);
+  state.amplitudeSmoothed += (params.amplitude      - state.amplitudeSmoothed) * Math.min(1, dt * 14);
 
   // Arc trail — record gaze position and prune old points
   state.now += dt;
@@ -2732,21 +2739,54 @@ function drawMouth() {
   const curve = params.mouthCurve + beh.mouthCurve();
 
   const p0x = mx - hw, p0y = my;
-  const cpx = mx,      cpy = my + curve;
   const p1x = mx + hw, p1y = my;
 
-  if (params.mouthTaper > 0) {
-    drawTaperedBezier(p0x, p0y, cpx, cpy, p1x, p1y, params.mouthThickness, params.mouthTaper, params.mouthTaper, colors.mouthColor, false);
-  } else {
+  const openAmt = state.amplitudeSmoothed * params.mouthOpenMax;
+
+  if (openAmt >= 0.5) {
+    // ── Open mouth (speaking) ─────────────────────────────────────────────
+    // Upper lip preserves partial smile/frown shape.
+    // Lower lip drops by openAmt — always stays below upper lip.
+    const upperCtrl = curve * 0.45;
+    const lowerCtrl = upperCtrl + openAmt;
+
+    // Fade fill in over the first few pixels of opening to avoid hard pop
+    const fillAlpha = Math.min(1, openAmt / 4);
+
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(p0x, p0y);
-    ctx.quadraticCurveTo(cpx, cpy, p1x, p1y);
+    ctx.quadraticCurveTo(mx, my + upperCtrl, p1x, p1y);   // upper lip →
+    ctx.quadraticCurveTo(mx, my + lowerCtrl, p0x, p0y);   // lower lip ←
+    ctx.closePath();
+
+    ctx.globalAlpha = fillAlpha;
+    ctx.fillStyle   = colors.mouthFillColor;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
     ctx.strokeStyle = colors.mouthColor;
-    ctx.lineWidth   = params.mouthThickness;
-    ctx.lineCap     = 'round';
+    ctx.lineWidth   = params.mouthThickness * 0.80;
+    ctx.lineJoin    = 'round';
     ctx.stroke();
     ctx.restore();
+
+  } else {
+    // ── Closed mouth (existing line drawing unchanged) ────────────────────
+    const cpx = mx, cpy = my + curve;
+    if (params.mouthTaper > 0) {
+      drawTaperedBezier(p0x, p0y, cpx, cpy, p1x, p1y, params.mouthThickness, params.mouthTaper, params.mouthTaper, colors.mouthColor, false);
+    } else {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(p0x, p0y);
+      ctx.quadraticCurveTo(cpx, cpy, p1x, p1y);
+      ctx.strokeStyle = colors.mouthColor;
+      ctx.lineWidth   = params.mouthThickness;
+      ctx.lineCap     = 'round';
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 }
 

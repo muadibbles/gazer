@@ -80,7 +80,7 @@ Split `index.html` into deployable modules.
 - [ ] `renderer.servo.js` — maps gaze/lid/head values to servo positions via pigpio
 
 ### Expression depth
-- [ ] Speaking face — mouth animation, phoneme-driven or amplitude-driven
+- [x] Speaking face — amplitude-driven mouth; `params.amplitude` (0–1) opens mouth from closed curve to filled shape; `mouthOpenMax` controls height; smoothed at ~80ms for speech sync
 - [x] Listening face — tighter gaze, slower blink, more open lids, raised brows; reduced saccade range while attending
 - [x] POI-triggered expressions — `microAuto` picks pleased/curious by familiarity; per-event micros for dog, cat, kid, arrival, departure, face lost
 
