@@ -769,6 +769,12 @@ textarea.json-area {
         <button onclick="wsConnect()">Connect</button>
         <button onclick="wsDisconnect()">Disconnect</button>
       </div>
+      <div style="margin-top:8px">
+        <button id="renderer-mode-btn" onclick="toggleRendererMode()"
+          style="width:100%;font-size:9px;letter-spacing:0.1em;padding:5px 0">
+          RENDERER OFF
+        </button>
+      </div>
     </div></div>
   </div>
   <div class="log" id="log"></div>
@@ -2333,9 +2339,10 @@ function updateBlink(dt) {
 
 function update(dt) {
   const beh = getBehavior();
+  const arc  = state.arc;  // used in arc animation and squash sections
 
+  if (!rendererMode) {
   // Update arc animation — phase state machine
-  const arc = state.arc;
   if (arc.phase === 'anticipation') {
     arc.antT += dt / arc.antDur;
     if (arc.antT >= 1) {
@@ -2431,6 +2438,7 @@ function update(dt) {
       // Leave behaviorTimer running so the gap pause plays out normally
     }
   }
+  } // end !rendererMode (arc + saccade block)
 
   // Motion cascade — pupils move instantly (gazeX/Y), each body layer
   // lerps toward the gaze target at its own speed, creating natural trail.
@@ -2518,10 +2526,12 @@ function update(dt) {
     }
   }
 
-  updateDrive(dt);
-  updatePersonalTime(dt);
-  updatePoiFamiliarity(dt);
-  taskTick(dt);
+  if (!rendererMode) {
+    updateDrive(dt);
+    updatePersonalTime(dt);
+    updatePoiFamiliarity(dt);
+    taskTick(dt);
+  }
   updateBlink(dt);
 
   // Smooth blink reaction for brow/mouth follow
@@ -4095,6 +4105,20 @@ let ws = null;
 let _lastStateBroadcast = 0;
 const _STATE_HZ = 20; // state packets sent per second
 
+let rendererMode = false;
+
+function toggleRendererMode() {
+  rendererMode = !rendererMode;
+  const btn = document.getElementById('renderer-mode-btn');
+  if (btn) {
+    btn.textContent    = rendererMode ? 'RENDERER ON'  : 'RENDERER OFF';
+    btn.style.background  = rendererMode ? 'rgba(74,247,196,0.18)' : '';
+    btn.style.borderColor = rendererMode ? 'var(--iris)' : '';
+    btn.style.color       = rendererMode ? 'var(--iris)' : '';
+  }
+  logEvent(rendererMode ? 'renderer mode ON — engine paused' : 'renderer mode OFF — engine resumed');
+}
+
 function wsSetStatus(status) {
   const dot = document.getElementById('ws-dot');
   const txt = document.getElementById('ws-status-text');
@@ -4104,6 +4128,7 @@ function wsSetStatus(status) {
 }
 
 function wsBroadcastState() {
+  if (rendererMode) return;  // receiving state, not broadcasting it
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   const now = Date.now();
   if (now - _lastStateBroadcast < 1000 / _STATE_HZ) return;
@@ -4273,6 +4298,32 @@ function wsHandleMessage(msg) {
         logEvent('ws config loaded');
       }
       break;
+
+    case 'state': {
+      // Renderer mode — apply server state directly; engine stays paused
+      if (!rendererMode) break;
+      const d = msg.data;
+      if (!d) break;
+      // Behavior (use setters so transition blend fires correctly)
+      if (d.attn   && behaviors[d.attn])   setAttn(d.attn);
+      if (d.affect && behaviors[d.affect]) setAffect(d.affect);
+      // Gaze — the motion cascade + 3D springs will smooth these each frame
+      if (d.gazeX != null) state.gazeX = d.gazeX;
+      if (d.gazeY != null) state.gazeY = d.gazeY;
+      // Amplitude — set smoothed value directly; local smoothing continues
+      if (d.amplitude != null) state.amplitudeSmoothed = d.amplitude;
+      // POI index + drive
+      if (d.poiIdx != null) state.poiIdx = d.poiIdx;
+      if (d.drive) {
+        state.drive.enabled = !!d.drive.enabled;
+        if (d.drive.pressure && typeof d.drive.pressure === 'object') {
+          Object.assign(state.drive.pressure, d.drive.pressure);
+        }
+      }
+      // Task
+      state.activeTask = d.activeTask ?? null;
+      break;
+    }
 
     default:
       logEvent(`ws unknown: ${msg.type}`);
