@@ -989,6 +989,8 @@ const params = {
   noseOffsetY:     55,   // pixels below eye center Y
   noseBridgeH:     20,   // vertical arm height (px)
   noseWidth:       18,   // horizontal arm length (px)
+  noseAngle:       90,   // degrees — angle arm makes from bridge (90 = standard L)
+  noseRotation:    0,    // degrees — rotates whole nose around its start point
   noseWingH:       8,    // unused — kept for saved-config compat
   noseWingCurve:   4,    // unused — kept for saved-config compat
   noseThickness:   6,
@@ -2650,20 +2652,29 @@ function drawBlinkLid(eye) {
 function drawNose() {
   if (!params.showNose) return;
 
-  const mx      = params.eyeCenterX;
-  const my      = params.eyeCenterY + params.noseOffsetY;
+  const mx = params.eyeCenterX;
+  const my = params.eyeCenterY + params.noseOffsetY;
+
+  // Arm direction: noseAngle degrees clockwise from bridge (which points down).
+  //   noseAngle=90 → arm goes right (standard L)
+  //   noseAngle<90 → arm angles toward down-right (more acute corner)
+  //   noseAngle>90 → arm angles toward up-right (more obtuse, turning back)
+  const aRad = params.noseAngle * Math.PI / 180;
+  const armDx = Math.sin(aRad) * params.noseWidth;
+  const armDy = Math.cos(aRad) * params.noseWidth;
 
   ctx.save();
+  ctx.translate(mx, my);
+  ctx.rotate(params.noseRotation * Math.PI / 180);
   ctx.strokeStyle = colors.noseColor;
   ctx.lineWidth   = params.noseThickness;
   ctx.lineCap     = 'round';
   ctx.lineJoin    = 'round';
 
-  // L-shape: vertical drop, then horizontal arm to the right
   ctx.beginPath();
-  ctx.moveTo(mx, my);
-  ctx.lineTo(mx, my + params.noseBridgeH);
-  ctx.lineTo(mx + params.noseWidth, my + params.noseBridgeH);
+  ctx.moveTo(0, 0);
+  ctx.lineTo(0, params.noseBridgeH);                           // bridge: straight down
+  ctx.lineTo(armDx, params.noseBridgeH + armDy);              // arm at noseAngle
   ctx.stroke();
   ctx.restore();
 }
@@ -3695,6 +3706,8 @@ function buildControlPanels() {
       ['noseOffsetY',    'Height',      0,   200,  1,   0],
       ['noseBridgeH',    'Drop',        0,    60,  1,   0],
       ['noseWidth',      'Arm',         0,    80,  1,   0],
+      ['noseAngle',      'Angle',       0,   180,  1,   0],
+      ['noseRotation',   'Rotation',  -180,  180,  1,   0],
       ['noseThickness',  'Thickness',   1,    20,  1,   0],
     ],
     'panel-mouth': [
