@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GAZER v0.14</title>
+  <title>GAZER v0.26</title>
   <script type="importmap">
   {
     "imports": {
@@ -718,32 +718,6 @@ textarea.json-area {
   cursor: pointer;
   user-select: none;
 }
-input[type="checkbox"].grid-cb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  border: 1px solid var(--border);
-  border-radius: 2px;
-  background: transparent;
-  cursor: pointer;
-  flex-shrink: 0;
-  position: relative;
-}
-input[type="checkbox"].grid-cb:checked {
-  background: var(--iris);
-  border-color: var(--iris);
-}
-input[type="checkbox"].grid-cb:checked::after {
-  content: '';
-  position: absolute;
-  left: 3px; top: 1px;
-  width: 5px; height: 8px;
-  border: 2px solid var(--bg);
-  border-top: none;
-  border-left: none;
-  transform: rotate(45deg);
-}
 
   </style>
 </head>
@@ -751,7 +725,7 @@ input[type="checkbox"].grid-cb:checked::after {
 
 <header>
   <h1><span class="status-dot"></span>Gazer</h1>
-  <span>v0.14 — robot eye behavior system</span>
+  <span>v0.26 — robot eye behavior system</span>
 </header>
 
 <div class="left-panel">
@@ -959,6 +933,13 @@ input[type="checkbox"].grid-cb:checked::after {
       </div>
 
       <div id="drive-sliders"></div>
+
+      <div style="display:flex;gap:6px;align-items:center;margin-top:4px;">
+        <label for="ball-timeout" style="font-size:9px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;white-space:nowrap;">Ball timeout</label>
+        <input type="range" id="ball-timeout" min="0.5" max="10" step="0.5" value="3" style="flex:1;"
+          oninput="params.ballTrackTimeout=+this.value; document.getElementById('ball-timeout-val').textContent=this.value+'s'"/>
+        <span id="ball-timeout-val" style="color:var(--iris);font-size:9px;min-width:28px;">3s</span>
+      </div>
 
       <div id="drive-bars" style="margin-top:8px;display:none">
         <div class="behavior-group-label" style="margin-bottom:6px">PRESSURE</div>
@@ -4292,8 +4273,8 @@ const povCamera = new THREE.PerspectiveCamera(65, 1, 0.1, 100);
 // ── Ceiling camera (top-down survey, pan + zoom only) ────────────────────
 const ceilingCamera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
 ceilingCamera.up.set(0, 0, -1);    // "north" = toward -Z so top-down is stable
-ceilingCamera.position.set(0, 14, 0);
-ceilingCamera.lookAt(0, 0, 0);
+ceilingCamera.position.set(0, 10, 3);  // centred over POI cluster (z≈3), height 10
+ceilingCamera.lookAt(0, 0, 3);
 
 const ceilingControls = new OrbitControls(ceilingCamera, renderer.domElement);
 ceilingControls.target.set(0, 0, 0);
@@ -4485,7 +4466,8 @@ const POI_INIT = [
 ];
 
 const poiGeo = new THREE.OctahedronGeometry(0.30, 0); // 3× original size
-const _labelPos = new THREE.Vector3(); // pooled for label projection
+const _labelPos    = new THREE.Vector3(); // pooled for label projection
+const _labelPosPov = new THREE.Vector3(); // pooled for POV-quadrant label projection
 window.pois = POI_INIT.map(({ x, y, z, s, label, category, color, affordances }) => {
   const mat  = new THREE.MeshLambertMaterial({
     color,
@@ -4512,7 +4494,12 @@ window.pois = POI_INIT.map(({ x, y, z, s, label, category, color, affordances })
   el.appendChild(barEl);
   container.appendChild(el);
 
-  return { mesh, salience: s, familiarity: 0, attention: 0, label, category, affordances: affordances || [], el, fillEl };
+  // Second label used in 4-up mode for the POV quadrant
+  const elPov = el.cloneNode(true);
+  elPov.style.display = 'none';
+  container.appendChild(elPov);
+
+  return { mesh, salience: s, familiarity: 0, attention: 0, label, category, affordances: affordances || [], el, elPov, fillEl };
 });
 
 // Apply any saved POI positions from localStorage (written by saveConfig in main script)
@@ -4613,8 +4600,8 @@ function endDrag() {
   const wasPOI = dragMesh !== null && dragMesh !== ball;
   isDragging = false;
   dragMesh   = null;
+  dragMode   = 'xz';
   controls.enabled = true;
-  // Persist POI positions whenever one is moved
   if (wasPOI && typeof window.saveConfig === 'function') window.saveConfig();
 }
 
@@ -4814,10 +4801,28 @@ function render() {
         sy = (-_labelPos.y * 0.5 + 0.5) * ch;
       }
       const behind = _labelPos.z > 1;
+      const opacity = isActive ? '1' : String(0.5 + (1 - fam) * 0.5);
       poi.el.style.display = (show && !behind) ? 'block' : 'none';
       poi.el.style.left    = `${sx}px`;
       poi.el.style.top     = `${sy}px`;
-      poi.el.style.opacity = isActive ? '1' : String(0.5 + (1 - fam) * 0.5);
+      poi.el.style.opacity = opacity;
+
+      // 4-up: also project through POV camera into the top-right quadrant
+      if (fourUpMode && poi.elPov) {
+        _labelPosPov.copy(poi.mesh.position);
+        _labelPosPov.y += 0.45 + attNorm * 0.3;
+        _labelPosPov.project(povCamera);
+        const povBehind = _labelPosPov.z > 1;
+        const hw = cw / 2, hh = ch / 2;
+        const px = (_labelPosPov.x * 0.5 + 0.5) * hw + hw;  // right half
+        const py = (-_labelPosPov.y * 0.5 + 0.5) * hh;       // top half (y < hh)
+        poi.elPov.style.display = (show && !povBehind) ? 'block' : 'none';
+        poi.elPov.style.left    = `${px}px`;
+        poi.elPov.style.top     = `${py}px`;
+        poi.elPov.style.opacity = opacity;
+      } else if (poi.elPov) {
+        poi.elPov.style.display = 'none';
+      }
     });
   }
 
