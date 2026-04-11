@@ -20,7 +20,10 @@
 - [x] Pressure / scoring — per-behavior float, novelty decay, hysteresis threshold
 - [x] Drive layer — baseline profile (`idle` 0.40, `curious` 0.25), session temperament
 - [x] Transition enforcer — illegal transition rerouting (`resting → waking → ...`)
-- [x] Rule engine — declarative `ruleTable`, 16 named events, typed actions (`pressure`, `look3D`, `setAttn`, `microExpress`)
+- [x] Rule engine — declarative `ruleTable`, 19+ named events, typed actions (`pressure`, `look3D`, `setAttn`, `microExpress`, `microAuto`, `assignTask`, `completeTask`)
+- [x] Task system — queued directed interactions; utility (transactional) + social (open-ended) modes; interrupt support; POI affordances schema
+- [x] POI-sourced events — `dog_begging`, `dog_play_request`, `cat_greeting`, `kid_play_request`, `arrival`, `departure`
+- [x] `states.py` — interactive scenario tester; 11 named scenarios covering pets, tasks, social, multi-task queue, interrupt
 
 ### World model
 - [x] POIs — 8 named 3D markers (Person, Child, Cat, Dog, TV, Window, Food Bowl, Front Door)
@@ -39,10 +42,19 @@
 
 ## Up next
 
+### Multi-camera views
+Four named cameras rendered as a switchable single view or a 2×2 grid.
+
+- [ ] **Face cam** — camera attached to the robot's head, pointing at the face from slightly in front; shows the live 2D eye render on the 3D face mesh at all times regardless of orbit position
+- [ ] **POV cam** — camera mounted at the robot's eye position, pointing in the direction of current gaze; shows what the robot is actually looking at in the 3D world
+- [ ] **Ceiling cam** — fixed overhead orthographic view; surveys the full scene, all POIs, and the robot's body orientation at a glance
+- [ ] **Perspective cam** — existing orbit-controlled camera, preserved as the fourth view
+- [ ] **Layout toggle** — single-view selector (cycle through the four) and 2×2 four-up grid mode; each quadrant labeled
+
 ### Input pipeline
 Connect the rule engine to real sensors. The rule engine is ready — it just needs events.
 
-- [ ] `send.py` upgrades — native `attn`, `affect`, `micro`, `event`, `pressure` commands (currently require `raw` workaround)
+- [x] `send.py` upgrades — native `attn`, `affect`, `micro`, `event`, `pressure` commands; event data payloads (`x=`, `y=`, `z=`, `scale=`); `look3D` command
 - [ ] Face detection process — camera → 3D position → `face_detected {x,y,z}` → person POI tracks a real face
 - [ ] Audio process — microphone amplitude → `loud_sound` / `startle`; voice activity → `speech_start` / `speech_end`
 - [ ] Time-of-day — scheduler that shifts drive profile weights on a day curve (morning alert, evening sleepy)
@@ -69,8 +81,8 @@ Split `index.html` into deployable modules.
 
 ### Expression depth
 - [ ] Speaking face — mouth animation, phoneme-driven or amplitude-driven
-- [ ] Listening face — subtle lid + brow settle, reduced saccade range while attending
-- [ ] POI-triggered expressions — surprised when person enters, pleased at familiar face, curious at new object
+- [x] Listening face — tighter gaze, slower blink, more open lids, raised brows; reduced saccade range while attending
+- [x] POI-triggered expressions — `microAuto` picks pleased/curious by familiarity; per-event micros for dog, cat, kid, arrival, departure, face lost
 
 ### Testing
 - [ ] Update `send.py` with all event types
