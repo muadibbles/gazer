@@ -566,21 +566,27 @@ textarea.json-area {
 .ws-url-input:focus { border-color: var(--iris); }
 
 /* 3D view toggle */
-.view-toggle-row {
+.view-btn-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  gap: 4px;
   padding-bottom: 12px;
   margin-bottom: 4px;
   border-bottom: 1px solid var(--border);
 }
-.view-toggle-row label {
-  font-size: 10px;
-  letter-spacing: 0.15em;
+.view-btn {
+  flex: 1;
+  padding: 5px 2px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text);
-  cursor: pointer;
-  user-select: none;
+  white-space: nowrap;
+}
+.view-btn.active {
+  background: rgba(74,247,196,0.18);
+  border-color: var(--iris);
+  color: var(--iris);
+  font-weight: 700;
+}
 }
 
 /* 3D stage */
@@ -749,11 +755,12 @@ input[type="checkbox"].grid-cb:checked::after {
 </header>
 
 <div class="left-panel">
-  <div class="view-toggle-row">
-    <input type="checkbox" class="grid-cb" id="toggle-3d" onchange="toggle3D(this.checked)" checked />
-    <label for="toggle-3d">3D View</label>
-    <input type="checkbox" class="grid-cb" id="toggle-4up" onchange="toggle4Up(this.checked)" style="margin-left:10px;"/>
-    <label for="toggle-4up">4-up</label>
+  <div class="view-btn-row">
+    <button class="view-btn" id="vbtn-face"        onclick="setView('face')">Face</button>
+    <button class="view-btn" id="vbtn-pov"         onclick="setView('pov')">POV</button>
+    <button class="view-btn" id="vbtn-ceiling"     onclick="setView('ceiling')">Ceiling</button>
+    <button class="view-btn active" id="vbtn-perspective" onclick="setView('perspective')">Persp</button>
+    <button class="view-btn" id="vbtn-4up"         onclick="setView('4up')">4-up</button>
   </div>
   <div class="view-toggle-row" style="margin-top:6px;color:var(--muted);font-size:11px;letter-spacing:.04em;">BALL AXIS LOCKS</div>
   <div class="view-toggle-row">
@@ -817,19 +824,19 @@ input[type="checkbox"].grid-cb:checked::after {
   <div id="quad-overlays">
     <div class="quad-overlay" data-view="face">
       <span class="quad-label">Face</span>
-      <button class="expand-btn" onclick="expandView('face')" title="Expand">○</button>
+      <button class="expand-btn" onclick="setView('face')" title="Expand">○</button>
     </div>
     <div class="quad-overlay" data-view="pov">
       <span class="quad-label">POV</span>
-      <button class="expand-btn" onclick="expandView('pov')" title="Expand">○</button>
+      <button class="expand-btn" onclick="setView('pov')" title="Expand">○</button>
     </div>
     <div class="quad-overlay" data-view="ceiling">
       <span class="quad-label">Ceiling</span>
-      <button class="expand-btn" onclick="expandView('ceiling')" title="Expand">○</button>
+      <button class="expand-btn" onclick="setView('ceiling')" title="Expand">○</button>
     </div>
     <div class="quad-overlay" data-view="perspective">
       <span class="quad-label">Perspective</span>
-      <button class="expand-btn" onclick="expandView('perspective')" title="Expand">○</button>
+      <button class="expand-btn" onclick="setView('perspective')" title="Expand">○</button>
     </div>
   </div>
 </div>
@@ -3364,34 +3371,23 @@ function toggleAcc(id) {
   document.getElementById(id).classList.toggle('open');
 }
 
-function toggle3D(on) {
-  document.querySelector('.stage').classList.toggle('mode-3d', on);
-  if (on && window.three) window.three.resize();
-}
-
-function toggle4Up(on) {
+function setView(v) {
   const stage = document.querySelector('.stage');
-  stage.classList.toggle('mode-4up', on);
-  if (on) {
-    // 4-up always needs 3D
-    document.getElementById('toggle-3d').checked = true;
-    toggle3D(true);
-  }
-  window.three?.setFourUpMode(on);
-}
+  const is4up = (v === '4up');
+  const is3d  = (v !== 'face');
 
-function expandView(view) {
-  // Collapse 4-up first
-  document.getElementById('toggle-4up').checked = false;
-  toggle4Up(false);
-  if (view === 'face') {
-    document.getElementById('toggle-3d').checked = false;
-    toggle3D(false);
-  } else {
-    document.getElementById('toggle-3d').checked = true;
-    toggle3D(true);
-    window.three?.setActiveView(view);
-  }
+  stage.classList.toggle('mode-3d',  is3d);
+  stage.classList.toggle('mode-4up', is4up);
+
+  if (is3d && window.three) window.three.resize();
+  window.three?.setFourUpMode(is4up);
+  if (!is4up && is3d) window.three?.setActiveView(v);
+
+  // Highlight active button
+  ['face','pov','ceiling','perspective','4up'].forEach(id => {
+    const btn = document.getElementById('vbtn-' + id);
+    if (btn) btn.classList.toggle('active', id === v);
+  });
 }
 
 function makeColorRow(key, label, onChange) {
@@ -4120,8 +4116,8 @@ syncAllSliders();
 window.state  = state;
 window.params = params;
 window.colors = colors;
-// Default to 3D view on load
-toggle3D(true);
+// Default to perspective view on load
+setView('perspective');
 logEvent('system ready');
 logEvent('gaze → idle  |  expr → idle');
 
