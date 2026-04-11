@@ -384,6 +384,83 @@ button.active {
   opacity: 0.6;
 }
 
+/* POI info widget */
+#poi-info {
+  margin-bottom: 10px;
+  padding: 10px 0 6px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.poi-info-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+#poi-info-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-bright);
+  text-transform: uppercase;
+}
+#poi-info-cat {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--iris);
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+.poi-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.poi-info-lbl {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-transform: uppercase;
+  min-width: 64px;
+}
+.poi-info-bar {
+  flex: 1;
+  height: 3px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.poi-info-bar-fill {
+  height: 100%;
+  background: var(--iris);
+  border-radius: 2px;
+  transition: width 0.3s;
+  width: 0%;
+}
+.poi-info-val {
+  font-size: 9px;
+  color: var(--iris);
+  min-width: 34px;
+  text-align: right;
+}
+.poi-affordances {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+.poi-aff-tag {
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: rgba(74,247,196,0.08);
+  color: rgba(74,247,196,0.6);
+  border: 1px solid rgba(74,247,196,0.15);
+}
+
 /* Accordions */
 .accordion { margin-bottom: 4px; }
 .acc-header {
@@ -695,6 +772,22 @@ input[type="checkbox"].grid-cb:checked::after {
     <input type="range" id="ball-timeout" min="0.5" max="10" step="0.5" value="3" style="flex:1;"
       oninput="params.ballTrackTimeout=+this.value; document.getElementById('ball-timeout-val').textContent=this.value+'s'"/>
     <span id="ball-timeout-val" style="color:var(--muted);font-size:11px;min-width:28px;">3s</span>
+  </div>
+  <div id="poi-info">
+    <div class="poi-info-head">
+      <span id="poi-info-name">—</span>
+      <span id="poi-info-cat"></span>
+    </div>
+    <div class="poi-info-row">
+      <span class="poi-info-lbl">Familiarity</span>
+      <div class="poi-info-bar"><div class="poi-info-bar-fill" id="poi-fam-fill"></div></div>
+      <span class="poi-info-val" id="poi-fam-val">—</span>
+    </div>
+    <div class="poi-info-row">
+      <span class="poi-info-lbl">Attention</span>
+      <span class="poi-info-val" id="poi-attn-val">—</span>
+    </div>
+    <div class="poi-affordances" id="poi-affordances"></div>
   </div>
   <div class="accordion" id="acc-ws">
     <button class="acc-header" onclick="toggleAcc('acc-ws')">
@@ -3029,6 +3122,7 @@ function draw() {
 
   updateCompUI();
   updateDriveUI();
+  updatePoiWidget();
 }
 
 function updateCompUI() {
@@ -3055,6 +3149,50 @@ function updateCompUI() {
   }
 }
 
+
+function updatePoiWidget() {
+  const idx = state.poiIdx;
+  const poi = (window.pois && idx >= 0) ? window.pois[idx] : null;
+
+  const nameEl  = document.getElementById('poi-info-name');
+  const catEl   = document.getElementById('poi-info-cat');
+  const famFill = document.getElementById('poi-fam-fill');
+  const famVal  = document.getElementById('poi-fam-val');
+  const attnVal = document.getElementById('poi-attn-val');
+  const affEl   = document.getElementById('poi-affordances');
+
+  if (!nameEl) return;
+
+  if (!poi) {
+    nameEl.textContent  = '—';
+    catEl.textContent   = '';
+    famFill.style.width = '0%';
+    famVal.textContent  = '—';
+    attnVal.textContent = '—';
+    affEl.innerHTML     = '';
+    return;
+  }
+
+  nameEl.textContent = poi.label || '—';
+  catEl.textContent  = poi.category || '';
+
+  const fam = poi.familiarity || 0;
+  famFill.style.width = `${Math.round(fam * 100)}%`;
+  famVal.textContent  = fam.toFixed(2);
+
+  const secs = poi.attention || 0;
+  attnVal.textContent = secs >= 60
+    ? `${Math.floor(secs / 60)}m ${Math.floor(secs % 60)}s`
+    : `${secs.toFixed(1)}s`;
+
+  // Rebuild affordance tags only when POI changes
+  if (affEl.dataset.poiIdx !== String(idx)) {
+    affEl.dataset.poiIdx = String(idx);
+    affEl.innerHTML = (poi.affordances || [])
+      .map(a => `<span class="poi-aff-tag">${a}</span>`)
+      .join('');
+  }
+}
 
 function updateDriveUI() {
   const d = state.drive;
@@ -4620,6 +4758,8 @@ function render() {
     renderer.setClearColor(new THREE.Color(window.colors?.stageBg ?? '#0a0a0f'));
     ball.visible = !!(p.showBall);
 
+    // Force world matrix update so POV camera reads this frame's orientation
+    headGroup.updateWorldMatrix(true, false);
     // Update POV camera from head world transform + eye gaze
     _updatePovCamera(s);
 
@@ -4716,28 +4856,31 @@ function _renderFourUp() {
   const hh = Math.floor(H / 2);
 
   renderer.autoClear = false;
-  renderer.setScissorTest(false);
-  renderer.clear();                   // full clear (color + depth)
   renderer.setScissorTest(true);
+
+  // Top-left: face cam — clear to background (HTML canvas is the actual face overlay)
+  renderer.setViewport(0, hh, hw, hh);
+  renderer.setScissor(0, hh, hw, hh);
+  renderer.clear();
 
   // Top-right: POV  (Three.js y from bottom → top half = y=hh)
   renderer.setViewport(hw, hh, hw, hh);
   renderer.setScissor(hw, hh, hw, hh);
-  renderer.clearDepth();
+  renderer.clear();
   renderer.render(scene, povCamera);
 
   // Bottom-left: Ceiling
   ceilingControls.update();
   renderer.setViewport(0, 0, hw, hh);
   renderer.setScissor(0, 0, hw, hh);
-  renderer.clearDepth();
+  renderer.clear();
   renderer.render(scene, ceilingCamera);
 
   // Bottom-right: Perspective
   controls.update();
   renderer.setViewport(hw, 0, hw, hh);
   renderer.setScissor(hw, 0, hw, hh);
-  renderer.clearDepth();
+  renderer.clear();
   renderer.render(scene, camera);
 
   // Restore full viewport
