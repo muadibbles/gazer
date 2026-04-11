@@ -1258,6 +1258,10 @@ const state = {
   // World attention
   poiIdx:             -1,   // currently attended POI index (-1 = none)
   attentionHoldTimer:  0,   // seconds remaining for current POI fixation
+
+  // Task system
+  taskQueue:   [],    // pending tasks (FIFO, interrupt pushes to front)
+  activeTask:  null,  // currently executing task
 };
 
 let lastTime = null;
@@ -1942,6 +1946,132 @@ function selectAttentionPOI() {
 }
 
 // ─────────────────────────────────────────────
+//  TASK SYSTEM
+//  Queue of directed interactions. Tasks override
+//  autonomous POI selection while active.
+//
+//  Modes:
+//    utility — transactional; quick acknowledge →
+//              process → wait for task_complete
+//    social  — open-ended; listen → engage →
+//              wait for task_complete
+//
+//  Completion: always explicit via task_complete event.
+//  Interrupt: pushes new task to queue front, ends current.
+// ─────────────────────────────────────────────
+
+let _taskCounter = 0;
+
+function assignTask(data) {
+  data = data || {};
+  const task = {
+    id:          ++_taskCounter,
+    sourcePOI:   data.source   != null ? +data.source   : -1,
+    targetPOI:   data.target   != null ? +data.target   : -1,
+    action:      data.action   || 'interact',
+    mode:        data.mode     || 'utility',
+    phase:       0,
+    phaseTimer:  0,
+    interrupt:   !!data.interrupt,
+  };
+
+  if (task.interrupt && state.activeTask) {
+    state.taskQueue.unshift(task);           // jump the queue
+    _endActiveTask(true);                    // silent: no completion flourish
+  } else {
+    state.taskQueue.push(task);
+    if (!state.activeTask) _startNextTask(); // start immediately if idle
+  }
+
+  logEvent(`task queued: ${task.action} (${task.mode}) id=${task.id}`);
+}
+
+function _startNextTask() {
+  if (state.taskQueue.length === 0) return;
+  state.activeTask = state.taskQueue.shift();
+  state.activeTask.phase      = 0;
+  state.activeTask.phaseTimer = 0;
+
+  // Lock attention on target POI for duration of task
+  const pois = window.pois;
+  if (state.activeTask.targetPOI >= 0 && pois && pois[state.activeTask.targetPOI]) {
+    state.poiIdx             = state.activeTask.targetPOI;
+    state.attentionHoldTimer = 9999; // held until task completes
+  }
+
+  if (state.activeTask.mode === 'utility') {
+    setAttn('attentive');
+    setAffect('attentive');
+  } else {
+    setAttn('listening');
+    setAffect('listening');
+  }
+
+  logEvent(`task started: ${state.activeTask.action} (${state.activeTask.mode})`);
+}
+
+function _endActiveTask(silent) {
+  if (!state.activeTask) return;
+  const task       = state.activeTask;
+  state.activeTask = null;
+  state.attentionHoldTimer = 0;  // release attention lock
+
+  if (!silent) {
+    // Look back at whoever assigned the task
+    const pois = window.pois;
+    if (task.sourcePOI >= 0 && task.sourcePOI !== task.targetPOI && pois && pois[task.sourcePOI]) {
+      state.poiIdx             = task.sourcePOI;
+      state.attentionHoldTimer = 2.5;
+    }
+
+    if (task.mode === 'utility') {
+      microExpress('pleased', 0.4);
+    }
+    setAffect('idle');
+    setAttn('idle');
+  }
+
+  logEvent(`task ${silent ? 'interrupted' : 'complete'}: ${task.action}`);
+}
+
+// Called by the task_complete event — completes the active task with flourish.
+function completeTask() {
+  if (!state.activeTask) { logEvent('task_complete: no active task'); return; }
+  _endActiveTask(false);
+  if (state.taskQueue.length > 0) _startNextTask();
+}
+
+function taskTick(dt) {
+  if (!state.activeTask) {
+    if (state.taskQueue.length > 0) _startNextTask();
+    return;
+  }
+
+  const task = state.activeTask;
+  task.phaseTimer += dt;
+
+  if (task.mode === 'utility') {
+    // Phase 0: acknowledge (0.8s) — attentive, holding eye contact
+    // Phase 1: processing (open) — waiting for task_complete
+    if (task.phase === 0 && task.phaseTimer >= 0.8) {
+      task.phase = 1;
+      task.phaseTimer = 0;
+      setAttn('processing');
+      setAffect('processing');
+    }
+  } else {
+    // Phase 0: listening (2s) — receptive, minimal saccade
+    // Phase 1: engaged (open) — leaning in, waiting for task_complete
+    if (task.phase === 0 && task.phaseTimer >= 2.0) {
+      task.phase = 1;
+      task.phaseTimer = 0;
+      setAttn('engaged');
+      setAffect('engaged');
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
 //  BEZIER POINT ALONG ARC
 // ─────────────────────────────────────────────
 
@@ -2231,6 +2361,7 @@ function update(dt) {
   updateDrive(dt);
   updatePersonalTime(dt);
   updatePoiFamiliarity(dt);
+  taskTick(dt);
   updateBlink(dt);
 
   // Smooth blink reaction for brow/mouth follow
@@ -3306,6 +3437,47 @@ const ruleTable = {
   startup:         [
     { action: 'setAttn',         value: 'waking' },
   ],
+
+  // ── POI-sourced events ──
+  // Pets
+  dog_begging:      [
+    { pressure: 'curious',       add: 0.30 },
+    { action: 'look3D',          cat: 'pet' },
+  ],
+  dog_play_request: [
+    { pressure: 'engaged',       add: 0.30 },
+    { action: 'look3D',          cat: 'pet' },
+  ],
+  cat_greeting:     [
+    { pressure: 'curious',       add: 0.20 },
+    { action: 'look3D',          cat: 'pet' },
+  ],
+  // People
+  kid_play_request: [
+    { pressure: 'engaged',       add: 0.50 },
+    { action: 'look3D',          cat: 'person' },
+  ],
+  arrival:          [
+    { pressure: 'attentive',     add: 0.60 },
+    { pressure: 'alert',         add: 0.20 },
+    { action: 'look3D',          cat: 'person' },
+  ],
+  departure:        [
+    { pressure: 'searching',     add: 0.40 },
+    { pressure: 'attentive',     add: -0.30 },
+  ],
+
+  // ── Task lifecycle ──
+  // data: { source, target, action, mode, interrupt }
+  //   source/target — POI index (0-based, matches window.pois order)
+  //   mode          — 'utility' | 'social'
+  //   interrupt     — truthy to jump the queue
+  assign_task:     [
+    { action: 'assignTask' },
+  ],
+  task_complete:   [
+    { action: 'completeTask' },
+  ],
 };
 
 // Emit a named event — runs all matching rules from ruleTable
@@ -3329,6 +3501,12 @@ function emitDriveEvent(eventName, data) {
 
       } else if (rule.action === 'setAttn') {
         setAttn(rule.value);
+
+      } else if (rule.action === 'assignTask') {
+        assignTask(data);
+
+      } else if (rule.action === 'completeTask') {
+        completeTask();
 
       } else if (rule.micro != null) {
         microExpress(rule.micro, rule.dur);
@@ -3923,21 +4101,35 @@ scene.add(ball);
 // People > Pets > Objects in baseline salience.
 const POI_INIT = [
   // People — robot is most interested in humans
-  { x: -1.8, y: 1.5, z: 3.0, s: 1.5, label: 'Person',     category: 'person', color: 0xff8844 },
-  { x:  0.8, y: 1.9, z: 2.5, s: 1.3, label: 'Child',      category: 'person', color: 0xffbb55 },
-  // Pets
-  { x: -0.4, y: 1.1, z: 2.5, s: 1.1, label: 'Cat',        category: 'pet',    color: 0x55ee88 },
-  { x:  1.6, y: 0.9, z: 2.8, s: 1.0, label: 'Dog',        category: 'pet',    color: 0x44dd66 },
-  // Household features
-  { x:  2.0, y: 1.5, z: 3.2, s: 0.9, label: 'TV',         category: 'object', color: 0x4488ff },
-  { x: -2.2, y: 1.8, z: 3.5, s: 0.7, label: 'Window',     category: 'object', color: 0x88ccff },
-  { x:  0.0, y: 0.5, z: 2.0, s: 0.6, label: 'Food Bowl',  category: 'object', color: 0xff6699 },
-  { x: -0.9, y: 1.5, z: 3.8, s: 0.9, label: 'Front Door', category: 'object', color: 0xaa88ff },
+  // index 0
+  { x: -1.8, y: 1.5, z: 3.0, s: 1.5, label: 'Person',     category: 'person', color: 0xff8844,
+    affordances: ['utility', 'social', 'command', 'greeting'] },
+  // index 1
+  { x:  0.8, y: 1.9, z: 2.5, s: 1.3, label: 'Child',      category: 'person', color: 0xffbb55,
+    affordances: ['social', 'play_request', 'greeting'] },
+  // Pets — index 2
+  { x: -0.4, y: 1.1, z: 2.5, s: 1.1, label: 'Cat',        category: 'pet',    color: 0x55ee88,
+    affordances: ['cat_greeting', 'beg_play'] },
+  // index 3
+  { x:  1.6, y: 0.9, z: 2.8, s: 1.0, label: 'Dog',        category: 'pet',    color: 0x44dd66,
+    affordances: ['dog_begging', 'dog_play_request', 'greeting'] },
+  // Household features — index 4
+  { x:  2.0, y: 1.5, z: 3.2, s: 0.9, label: 'TV',         category: 'object', color: 0x4488ff,
+    affordances: ['watch'] },
+  // index 5
+  { x: -2.2, y: 1.8, z: 3.5, s: 0.7, label: 'Window',     category: 'object', color: 0x88ccff,
+    affordances: ['watch'] },
+  // index 6
+  { x:  0.0, y: 0.5, z: 2.0, s: 0.6, label: 'Food Bowl',  category: 'object', color: 0xff6699,
+    affordances: ['fill_request'] },
+  // index 7
+  { x: -0.9, y: 1.5, z: 3.8, s: 0.9, label: 'Front Door', category: 'object', color: 0xaa88ff,
+    affordances: ['arrival', 'departure'] },
 ];
 
 const poiGeo = new THREE.OctahedronGeometry(0.30, 0); // 3× original size
 const _labelPos = new THREE.Vector3(); // pooled for label projection
-window.pois = POI_INIT.map(({ x, y, z, s, label, category, color }) => {
+window.pois = POI_INIT.map(({ x, y, z, s, label, category, color, affordances }) => {
   const mat  = new THREE.MeshLambertMaterial({
     color,
     emissive: new THREE.Color(color).multiplyScalar(0.15),
@@ -3963,7 +4155,7 @@ window.pois = POI_INIT.map(({ x, y, z, s, label, category, color }) => {
   el.appendChild(barEl);
   container.appendChild(el);
 
-  return { mesh, salience: s, familiarity: 0, attention: 0, label, category, el, fillEl };
+  return { mesh, salience: s, familiarity: 0, attention: 0, label, category, affordances: affordances || [], el, fillEl };
 });
 
 // Apply any saved POI positions from localStorage (written by saveConfig in main script)
