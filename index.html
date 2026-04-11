@@ -1407,18 +1407,18 @@ const behaviors = {
   listening: {
     label: 'LISTENING',
     enterDur: 0.40, enterEase: 'inOutCubic',
-    gazeRadius:    0.20,
-    pauseMin:      0.8,  pauseMax: 1.8,
+    gazeRadius:    0.18,   // tighter than before — locked on speaker
+    pauseMin:      1.0,  pauseMax: 2.2,  // longer pauses — patient, not scanning
     easeFn:        () => ease.inOutCubic,
-    speedMult:     0.85,
-    blinkMult:     0.65,
-    lidOpenness:   () => params.lidOpenness,
-    upperLid:      () => Math.max(0, params.upperLidPos - 0.02),
+    speedMult:     0.75,   // slower — deliberate, not restless
+    blinkMult:     0.55,   // very slow blink — concentrated
+    lidOpenness:   () => Math.min(1, params.lidOpenness * 1.06),  // slightly more open — receptive
+    upperLid:      () => Math.max(0, params.upperLidPos - 0.04),
     lowerLid:      () => Math.min(1, params.lowerLidPos + 0.00),
-    browRaise:     () =>  6,
-    browTilt:      () =>  2,
-    browArch:      () =>  4,
-    mouthCurve:    () =>  8,
+    browRaise:     () =>  8,   // higher — open, attentive
+    browTilt:      () =>  1,   // nearly level — not tense
+    browArch:      () =>  6,   // soft arch — warm not stern
+    mouthCurve:    () => 10,   // slight upturn — friendly
   },
   processing: {
     label: 'PROCESSING',
@@ -1975,6 +1975,9 @@ function assignTask(data) {
     interrupt:   !!data.interrupt,
   };
 
+  // Brief acknowledgment flash before behavior transitions
+  microExpress('alert', 0.08);
+
   if (task.interrupt && state.activeTask) {
     state.taskQueue.unshift(task);           // jump the queue
     _endActiveTask(true);                    // silent: no completion flourish
@@ -2024,11 +2027,11 @@ function _endActiveTask(silent) {
       state.attentionHoldTimer = 2.5;
     }
 
-    if (task.mode === 'utility') {
-      microExpress('pleased', 0.4);
-    }
+    // Set idle first so the micro's hold-return target lands on idle, not processing/engaged
     setAffect('idle');
     setAttn('idle');
+    // Flash pleased — duration is longer for social (warmer wrap-up)
+    microExpress('pleased', task.mode === 'social' ? 0.60 : 0.40);
   }
 
   logEvent(`task ${silent ? 'interrupted' : 'complete'}: ${task.action}`);
@@ -3362,21 +3365,27 @@ const ruleTable = {
   face_detected:   [
     { pressure: 'attentive',     add: 0.60 },
     { action: 'look3D',          cat: 'person' },
+    // familiar face → pleased recognition; new face → curious
+    { action: 'microAuto', low: 'curious', lowDur: 0.20, high: 'pleased', highDur: 0.35 },
   ],
   face_lost:       [
     { pressure: 'searching',     add: 0.50 },
+    { micro: 'confused',         dur: 0.18 },
   ],
   person_entered:  [
     { pressure: 'attentive',     add: 0.70 },
     { pressure: 'alert',         add: 0.30 },
     { action: 'look3D',          cat: 'person' },
+    { micro: 'alert',            dur: 0.10 },
   ],
   person_left:     [
     { pressure: 'searching',     add: 0.50 },
     { pressure: 'attentive',     add: -0.30 },
+    { micro: 'confused',         dur: 0.15 },
   ],
   person_close:    [
     { pressure: 'uncomfortable', add: 0.40 },
+    { micro: 'uncomfortable',    dur: 0.20 },
   ],
   crowd_detected:  [
     { pressure: 'searching',     add: 0.30 },
@@ -3443,28 +3452,34 @@ const ruleTable = {
   dog_begging:      [
     { pressure: 'curious',       add: 0.30 },
     { action: 'look3D',          cat: 'pet' },
+    { micro: 'curious',          dur: 0.22 },
   ],
   dog_play_request: [
     { pressure: 'engaged',       add: 0.30 },
     { action: 'look3D',          cat: 'pet' },
+    { micro: 'pleased',          dur: 0.28 },
   ],
   cat_greeting:     [
     { pressure: 'curious',       add: 0.20 },
     { action: 'look3D',          cat: 'pet' },
+    { micro: 'curious',          dur: 0.18 },
   ],
   // People
   kid_play_request: [
     { pressure: 'engaged',       add: 0.50 },
     { action: 'look3D',          cat: 'person' },
+    { micro: 'engaged',          dur: 0.30 },
   ],
   arrival:          [
     { pressure: 'attentive',     add: 0.60 },
     { pressure: 'alert',         add: 0.20 },
     { action: 'look3D',          cat: 'person' },
+    { micro: 'alert',            dur: 0.12 },
   ],
   departure:        [
     { pressure: 'searching',     add: 0.40 },
     { pressure: 'attentive',     add: -0.30 },
+    { micro: 'confused',         dur: 0.15 },
   ],
 
   // ── Task lifecycle ──
@@ -3507,6 +3522,18 @@ function emitDriveEvent(eventName, data) {
 
       } else if (rule.action === 'completeTask') {
         completeTask();
+
+      } else if (rule.action === 'microAuto') {
+        // Pick expression based on the currently attended POI's familiarity.
+        // High familiarity → warm recognition (pleased); low → curiosity.
+        const _poi = window.pois && window.pois[state.poiIdx];
+        const _fam = _poi ? _poi.familiarity : 0;
+        const _familiar = _fam > (rule.threshold != null ? rule.threshold : 0.3);
+        microExpress(
+          _familiar ? rule.high  : rule.low,
+          _familiar ? (rule.highDur != null ? rule.highDur : 0.25)
+                    : (rule.lowDur  != null ? rule.lowDur  : 0.20)
+        );
 
       } else if (rule.micro != null) {
         microExpress(rule.micro, rule.dur);
