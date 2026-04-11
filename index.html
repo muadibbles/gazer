@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GAZER v0.13</title>
+  <title>GAZER v0.14</title>
   <script type="importmap">
   {
     "imports": {
@@ -602,12 +602,12 @@ input[type="checkbox"].grid-cb:checked::after {
 
 <header>
   <h1><span class="status-dot"></span>Gazer</h1>
-  <span>v0.13 — robot eye behavior system</span>
+  <span>v0.14 — robot eye behavior system</span>
 </header>
 
 <div class="left-panel">
   <div class="view-toggle-row">
-    <input type="checkbox" class="grid-cb" id="toggle-3d" onchange="toggle3D(this.checked)" />
+    <input type="checkbox" class="grid-cb" id="toggle-3d" onchange="toggle3D(this.checked)" checked />
     <label for="toggle-3d">3D View</label>
   </div>
   <div class="view-toggle-row" style="margin-top:6px;color:var(--muted);font-size:11px;letter-spacing:.04em;">BALL AXIS LOCKS</div>
@@ -1086,6 +1086,7 @@ const params = {
 
   // ── World attention (POIs) ──
   showPOIs:          true,   // show POI markers in 3D scene
+  showBall:          false,  // show manual gaze ball
   attentionHoldMin:  2.0,    // minimum POI fixation duration (s)
   attentionHoldMax:  5.0,    // maximum POI fixation duration (s)
 
@@ -3558,6 +3559,7 @@ function buildControlPanels() {
       ['stiSize',           'Marker size',    3,    30,  1,    0],
       ['showPersonalTime',  'Personal time',  'bool'],
       ['showPOIs',          'POI markers',    'bool'],
+      ['showBall',          'Gaze ball',      'bool'],
     ],
     'drive-sliders': [
       ['driveNoveltyDecay',  'Novelty decay',     0.01, 0.8,  0.01, 2],
@@ -3625,6 +3627,8 @@ syncAllSliders();
 window.state  = state;
 window.params = params;
 window.colors = colors;
+// Default to 3D view on load
+toggle3D(true);
 logEvent('system ready');
 logEvent('gaze → idle  |  expr → idle');
 
@@ -3803,7 +3807,7 @@ controls.target.set(0, 1.4, 0);
 controls.enableDamping  = true;
 controls.dampingFactor  = 0.06;
 controls.minDistance    = 2;
-controls.maxDistance    = 20;
+controls.maxDistance    = 60;
 controls.maxPolarAngle  = Math.PI * 0.88; // prevent going under the floor
 controls.update();
 
@@ -4183,6 +4187,8 @@ function render() {
     robot.rotation.x     = (s.bodyPitchArc || 0)  * Math.PI / 180;
     applyColors();
     renderer.setClearColor(new THREE.Color(window.colors?.stageBg ?? '#0a0a0f'));
+
+    ball.visible = !!(p.showBall);
 
     // POI markers + HTML label projection
     const pois = window.pois || [];
