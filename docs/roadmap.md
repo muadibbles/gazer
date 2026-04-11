@@ -73,7 +73,7 @@
 ## Up next
 
 ### Documentation
-- [ ] **README** — setup, dependencies, and usage for every script: `server.py`, `send.py`, `states.py`, `recorder.py`, `replay.py`, `simulate.py`, `face_detect.py`, `audio.py`, `time_scheduler.py`
+- [x] **README** — quick start, architecture, full scripts reference (`server.py`, `send.py`, `states.py`, `recorder.py`, `replay.py`, `simulate.py`, `face_detect.py`, `audio.py`, `time_scheduler.py`), full-stack runbook, params table
 
 ### Engine extraction
 Split `index.html` into deployable modules. Prerequisite for hardware targets.
