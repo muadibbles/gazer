@@ -45,11 +45,11 @@
 ### Multi-camera views
 Four named cameras rendered as a switchable single view or a 2×2 grid.
 
-- [ ] **Face cam** — camera attached to the robot's head, pointing at the face from slightly in front; shows the live 2D eye render on the 3D face mesh at all times regardless of orbit position
-- [ ] **POV cam** — camera mounted at the robot's eye position, pointing in the direction of current gaze; shows what the robot is actually looking at in the 3D world
-- [ ] **Ceiling cam** — fixed overhead orthographic view; surveys the full scene, all POIs, and the robot's body orientation at a glance
-- [ ] **Perspective cam** — existing orbit-controlled camera, preserved as the fourth view
-- [ ] **Layout toggle** — single-view selector (cycle through the four) and 2×2 four-up grid mode; each quadrant labeled
+- [x] **Face cam** — 2D eye canvas overlaid in top-left quadrant; always visible in 4-up mode
+- [x] **POV cam** — camera mounted at robot's eye position, looks in gaze direction (head quaternion + gazeX/Y)
+- [x] **Ceiling cam** — top-down perspective view; pan + zoom only (no rotation), up=-Z for gimbal stability
+- [x] **Perspective cam** — existing orbit-controlled camera, preserved as the fourth view
+- [x] **Layout toggle** — 4-up checkbox in left panel; expand (○) buttons on each quadrant to break out to single view; quadrants labeled
 
 ### Input pipeline
 Connect the rule engine to real sensors. The rule engine is ready — it just needs events.
