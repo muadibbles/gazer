@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GAZER v0.07</title>
+  <title>GAZER v0.08</title>
   <script type="importmap">
   {
     "imports": {
@@ -567,7 +567,7 @@ input[type="checkbox"].grid-cb:checked::after {
 
 <header>
   <h1><span class="status-dot"></span>Gazer</h1>
-  <span>v0.07 — robot eye behavior system</span>
+  <span>v0.08 — robot eye behavior system</span>
 </header>
 
 <div class="left-panel">
@@ -1049,6 +1049,11 @@ const params = {
   driveRiseRate:     0.80,  // rate at which pressure rises toward profile target
   driveHysteresis:   0.10,  // margin over current state required to trigger a switch
 
+  // ── World attention (POIs) ──
+  showPOIs:          true,   // show POI markers in 3D scene
+  attentionHoldMin:  2.0,    // minimum POI fixation duration (s)
+  attentionHoldMax:  5.0,    // maximum POI fixation duration (s)
+
   // ── Personal time (spatial memory) ──
   ptEnabled:         true,   // bias saccades toward unvisited regions
   ptStrength:        2.0,    // exponent — higher = stronger novelty preference
@@ -1213,6 +1218,10 @@ const state = {
 
   // Personal time — spatial memory (9×6 familiarity grid in normalised gaze space)
   pt: null,   // Float32Array(54), lazy-initialised on first use
+
+  // World attention
+  poiIdx:             -1,   // currently attended POI index (-1 = none)
+  attentionHoldTimer:  0,   // seconds remaining for current POI fixation
 };
 
 let lastTime = null;
@@ -1778,6 +1787,49 @@ function drawPersonalTime(eye) {
 }
 
 // ─────────────────────────────────────────────
+//  WORLD ATTENTION — POI selection & familiarity
+// ─────────────────────────────────────────────
+
+// Decay familiarity on all POIs; accumulate on the currently attended one
+function updatePoiFamiliarity(dt) {
+  const pois = window.pois;
+  if (!pois || !pois.length) return;
+  const decayAmt = params.ptDecay * dt;
+  for (let i = 0; i < pois.length; i++) {
+    pois[i].familiarity = Math.max(0, pois[i].familiarity - decayAmt);
+  }
+  if (state.poiIdx >= 0 && state.poiIdx < pois.length) {
+    pois[state.poiIdx].familiarity = Math.min(1, pois[state.poiIdx].familiarity + params.ptAccum * dt);
+  }
+}
+
+// Pick a POI to attend next, weighted toward novel (low familiarity) targets.
+// Sets state.poiIdx and state.attentionHoldTimer.
+function selectAttentionPOI() {
+  const pois = window.pois;
+  if (!pois || !pois.length) { randomSaccade(); return; }
+
+  const total = pois.reduce((s, p) => {
+    return s + Math.pow(Math.max(0.01, 1 - p.familiarity), params.ptStrength) * p.salience;
+  }, 0);
+
+  let pick = Math.random() * total;
+  for (let i = 0; i < pois.length; i++) {
+    const w = Math.pow(Math.max(0.01, 1 - pois[i].familiarity), params.ptStrength) * pois[i].salience;
+    pick -= w;
+    if (pick <= 0) {
+      state.poiIdx = i;
+      state.attentionHoldTimer = params.attentionHoldMin +
+        Math.random() * (params.attentionHoldMax - params.attentionHoldMin);
+      return;
+    }
+  }
+  // Fallback to last
+  state.poiIdx = pois.length - 1;
+  state.attentionHoldTimer = params.attentionHoldMin;
+}
+
+// ─────────────────────────────────────────────
 //  BEZIER POINT ALONG ARC
 // ─────────────────────────────────────────────
 
@@ -1952,14 +2004,29 @@ function update(dt) {
   if (!state.arc.active) {
     state.behaviorTimer += dt;
     if (state.behaviorTimer >= 0) {
-      randomSaccade();
+      // If POIs exist in the 3D scene, select one for full-body attention;
+      // otherwise fall back to eye-only random saccade.
+      if (window.pois && window.pois.length && !state.gazeTargetActive) {
+        selectAttentionPOI();
+      } else {
+        randomSaccade();
+      }
     }
-    // Micro-saccade drift while holding position
-    if (params.microSaccade > 0) {
+    // Micro-saccade drift while holding position (only when not POI-attending)
+    if (params.microSaccade > 0 && state.poiIdx < 0) {
       state.gazeX += (Math.random() - 0.5) * params.microSaccade * 0.008;
       state.gazeY += (Math.random() - 0.5) * params.microSaccade * 0.008;
       state.gazeX = Math.max(-0.95, Math.min(0.95, state.gazeX));
       state.gazeY = Math.max(-0.95, Math.min(0.95, state.gazeY));
+    }
+  }
+
+  // Attention hold countdown — when timer expires, release the current POI
+  if (state.poiIdx >= 0) {
+    state.attentionHoldTimer -= dt;
+    if (state.attentionHoldTimer <= 0) {
+      state.poiIdx = -1;
+      // Leave behaviorTimer running so the gap pause plays out normally
     }
   }
 
@@ -2051,6 +2118,7 @@ function update(dt) {
 
   updateDrive(dt);
   updatePersonalTime(dt);
+  updatePoiFamiliarity(dt);
   updateBlink(dt);
 
   // Smooth blink reaction for brow/mouth follow
@@ -3277,16 +3345,19 @@ function buildControlPanels() {
       ['stiPersist',        'Marker persist', 'bool'],
       ['stiSize',           'Marker size',    3,    30,  1,    0],
       ['showPersonalTime',  'Personal time',  'bool'],
+      ['showPOIs',          'POI markers',    'bool'],
     ],
     'drive-sliders': [
-      ['driveNoveltyDecay', 'Novelty decay',  0.01, 0.8,  0.01, 2],
-      ['driveRiseRate',     'Rise rate',      0.1,  3.0,  0.05, 2],
-      ['driveHysteresis',   'Hysteresis',     0.0,  0.5,  0.01, 2],
-      ['ptEnabled',         'Personal time',  'bool'],
-      ['ptStrength',        '↳ Novelty bias', 0.5,  5.0,  0.1,  1, true],
-      ['ptDecay',           '↳ Decay rate',   0.0,  0.3,  0.005,3, true],
-      ['ptAccum',           '↳ Accum rate',   0.1,  2.0,  0.05, 2, true],
-      ['ptSamples',         '↳ Candidates',   3,    20,   1,    0, true],
+      ['driveNoveltyDecay',  'Novelty decay',     0.01, 0.8,  0.01, 2],
+      ['driveRiseRate',      'Rise rate',         0.1,  3.0,  0.05, 2],
+      ['driveHysteresis',    'Hysteresis',        0.0,  0.5,  0.01, 2],
+      ['attentionHoldMin',   'Hold min (s)',      0.5,  10.0, 0.5,  1],
+      ['attentionHoldMax',   'Hold max (s)',      1.0,  15.0, 0.5,  1],
+      ['ptEnabled',          'Personal time',     'bool'],
+      ['ptStrength',         '↳ Novelty bias',    0.5,  5.0,  0.1,  1, true],
+      ['ptDecay',            '↳ Decay rate',      0.0,  0.3,  0.005,3, true],
+      ['ptAccum',            '↳ Accum rate',      0.1,  2.0,  0.05, 2, true],
+      ['ptSamples',          '↳ Candidates',      3,    20,   1,    0, true],
     ],
   };
 
@@ -3620,12 +3691,39 @@ function resize() {
 resize();
 window.addEventListener('resize', resize);
 
-// ── Gaze target ball ──
+// ── Gaze target ball (manual override) ──
 const ballMat = new THREE.MeshLambertMaterial({ color: 0xffdd00, emissive: 0x443300 });
 const ball = new THREE.Mesh(new THREE.SphereGeometry(0.12, 20, 14), ballMat);
 ball.position.set(0, WR + C + C / 2, 2.5); // start at head height, in front
 ball.castShadow = true;
 scene.add(ball);
+
+// ── Points of Interest (POIs) — autonomous attention targets ──
+// Pre-seeded positions: 6 at head height, 2 lower, all in front of robot
+const POI_INIT = [
+  { x: -2.0, y: 1.5, z: 3.0, s: 1.0 },
+  { x: -1.0, y: 1.9, z: 2.5, s: 1.0 },
+  { x: -0.3, y: 1.3, z: 2.5, s: 1.2 },
+  { x:  0.3, y: 1.3, z: 2.5, s: 1.2 },
+  { x:  1.0, y: 1.9, z: 2.5, s: 1.0 },
+  { x:  2.0, y: 1.5, z: 3.0, s: 1.0 },
+  { x: -0.8, y: 0.7, z: 2.2, s: 0.8 },
+  { x:  0.8, y: 0.7, z: 2.2, s: 0.8 },
+];
+
+const poiGeo = new THREE.OctahedronGeometry(0.10, 0);
+window.pois = POI_INIT.map(({ x, y, z, s }) => {
+  const mat  = new THREE.MeshLambertMaterial({
+    color:    0x4af7c4,
+    emissive: 0x0a3328,
+    transparent: true,
+    opacity: 0.85,
+  });
+  const mesh = new THREE.Mesh(poiGeo, mat);
+  mesh.position.set(x, y, z);
+  scene.add(mesh);
+  return { mesh, salience: s, familiarity: 0 };
+});
 
 // ── Drag interaction ──
 const raycaster  = new THREE.Raycaster();
@@ -3633,6 +3731,7 @@ const mouse      = new THREE.Vector2();
 const dragPlane  = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const dragPoint  = new THREE.Vector3();
 let   isDragging     = false;
+let   dragMesh       = null;  // ball or a POI mesh currently being dragged
 let   lockX          = false, lockZ = false;
 let   timeSinceDrag  = Infinity; // starts in "timed out" state so idle runs first
 const _headWorld     = new THREE.Vector3(); // pooled — reused every frame
@@ -3658,27 +3757,40 @@ function setBallY(y) { ball.position.y = Math.max(0.05, Math.min(6, y)); timeSin
 function startDrag(clientX, clientY) {
   getMouseNDC(clientX, clientY);
   raycaster.setFromCamera(mouse, camera);
+
+  // Check ball first
   if (raycaster.intersectObject(ball).length > 0) {
     isDragging = true;
+    dragMesh   = ball;
     controls.enabled = false;
     dragPlane.constant = -ball.position.y;
+    return true;
+  }
+  // Check POIs — hit if within 0.25 world units (generous for touch)
+  const poiMeshes = (window.pois || []).map(p => p.mesh);
+  const hits = raycaster.intersectObjects(poiMeshes);
+  if (hits.length > 0) {
+    isDragging = true;
+    dragMesh   = hits[0].object;
+    controls.enabled = false;
+    dragPlane.constant = -dragMesh.position.y;
     return true;
   }
   return false;
 }
 
 function moveDrag(clientX, clientY) {
-  if (!isDragging) return;
+  if (!isDragging || !dragMesh) return;
   getMouseNDC(clientX, clientY);
   raycaster.setFromCamera(mouse, camera);
   if (raycaster.ray.intersectPlane(dragPlane, dragPoint)) {
-    if (!lockX) ball.position.x = Math.max(-6, Math.min(6, dragPoint.x));
-    if (!lockZ) ball.position.z = Math.max(-6, Math.min(6, dragPoint.z));
+    if (!lockX) dragMesh.position.x = Math.max(-6, Math.min(6, dragPoint.x));
+    if (!lockZ) dragMesh.position.z = Math.max(-6, Math.min(6, dragPoint.z));
   }
 }
 
 function endDrag() {
-  if (isDragging) { isDragging = false; controls.enabled = true; }
+  if (isDragging) { isDragging = false; dragMesh = null; controls.enabled = true; }
 }
 
 // Mouse
@@ -3718,30 +3830,18 @@ function computeGazeFromBall() {
   };
 }
 
-// ── preUpdate — runs before main update() each frame ──
-function preUpdate(dt) {
-  const s = window.state;
-  const p = window.params;
-  if (!s || !p) return;
-
-  // Track time since last drag; reset on each drag frame
-  if (isDragging) timeSinceDrag = 0;
-  else            timeSinceDrag = Math.min(timeSinceDrag + dt, p.ballTrackTimeout + 1);
-
-  const tracking = timeSinceDrag < p.ballTrackTimeout;
-  s.gazeTargetActive = tracking;
-  if (!tracking) return; // hand control back to idle saccade system
-
+// ── Shared tracking math — drives head/body/eyes toward a world point ──
+function trackWorldPoint(targetPos, dt, s, p) {
   const HEAD_SHARE   = 0.75;
-  const EYE_NORM_DEG = 15; // 25% of 60° total range → ±1 gazeX/Y
+  const EYE_NORM_DEG = 15;
   const headStiff    = p.head3DSpeed * 4000;
-  const headDamp     = p.principlesEnabled ? p.headSpringDamp : 2 * Math.sqrt(headStiff); // critical when off
+  const headDamp     = p.principlesEnabled ? p.headSpringDamp : 2 * Math.sqrt(headStiff);
   const bodyStiff    = p.body3DSpeed * 3000;
   const bodyDamp     = p.principlesEnabled ? p.bodySpringDamp : 2 * Math.sqrt(bodyStiff);
   const maxHead      = p.headRotationMax;
 
-  // ── Yaw: head spring toward 75% of target, eyes cover the remaining 25% ──
-  const targetYawDeg  = Math.atan2(ball.position.x, ball.position.z) * 180 / Math.PI;
+  // Yaw: head springs toward 75% of target, eyes cover the remaining 25%
+  const targetYawDeg  = Math.atan2(targetPos.x, targetPos.z) * 180 / Math.PI;
   const relYawDeg     = targetYawDeg - s.body3DYaw;
   const headYawTarget = Math.max(-maxHead, Math.min(maxHead, relYawDeg * HEAD_SHARE));
   const headYawAcc    = headStiff * (headYawTarget - s.head3DYaw) - headDamp * s.head3DYawVel;
@@ -3750,9 +3850,9 @@ function preUpdate(dt) {
   const remainingYaw  = relYawDeg - s.head3DYaw;
   const gazeXTarget   = Math.max(-1, Math.min(1, remainingYaw / EYE_NORM_DEG));
 
-  // ── Pitch: head spring, eyes cover remainder ──
+  // Pitch: head spring, eyes cover remainder
   headGroup.getWorldPosition(_headWorld);
-  _ballDir.subVectors(ball.position, _headWorld);
+  _ballDir.subVectors(targetPos, _headWorld);
   const dist2D          = Math.sqrt(_ballDir.x * _ballDir.x + _ballDir.z * _ballDir.z);
   const totalPitchDeg   = -Math.atan2(_ballDir.y, dist2D) * 180 / Math.PI;
   const headPitchTarget = totalPitchDeg * HEAD_SHARE;
@@ -3762,29 +3862,59 @@ function preUpdate(dt) {
   const remainingPitch  = totalPitchDeg - s.head3DPitch;
   const gazeYTarget     = Math.max(-1, Math.min(1, remainingPitch / EYE_NORM_DEG));
 
-  // ── Body spring: kicks in when head yaw exceeds 60% of range ──
+  // Body spring: kicks in when head yaw exceeds 60% of range
   const deadband = maxHead * 0.6;
   if (Math.abs(s.head3DYaw) > deadband) {
     const excess   = s.head3DYaw - Math.sign(s.head3DYaw) * deadband;
     const bodyAcc  = bodyStiff * excess - bodyDamp * s.body3DYawVel;
     s.body3DYawVel += bodyAcc * dt;
   } else {
-    // Decay body velocity smoothly once head returns to range
     s.body3DYawVel *= Math.max(0, 1 - bodyDamp * 3 * dt);
   }
   s.body3DYaw += s.body3DYawVel * dt;
 
-  // ── Arc motion (Principle 7): head tilts + body leans into turns ──
+  // Arc motion (Principle 7)
   s.head3DRoll   = Math.max(-20, Math.min(20, -s.head3DYawVel * p.headArcFactor));
   s.bodyPitchArc = Math.max(-10, Math.min(10, -s.body3DYawVel * p.bodyArcFactor));
 
-  // ── Drive pupils toward the 25% remainder ──
+  // Drive pupils toward the residual 25%
   const eyeT = Math.min(1, dt * p.head3DSpeed * 80);
   s.gazeX   += (gazeXTarget - s.gazeX) * eyeT;
   s.gazeY   += (gazeYTarget - s.gazeY) * eyeT;
   s.arc.active    = false;
   s.arc.phase     = 'idle';
   s.behaviorTimer = -0.5;
+}
+
+// ── preUpdate — runs before main update() each frame ──
+function preUpdate(dt) {
+  const s = window.state;
+  const p = window.params;
+  if (!s || !p) return;
+
+  // Track time since last ball drag
+  if (isDragging && dragMesh === ball) timeSinceDrag = 0;
+  else timeSinceDrag = Math.min(timeSinceDrag + dt, p.ballTrackTimeout + 1);
+
+  const ballTracking = timeSinceDrag < p.ballTrackTimeout;
+
+  if (ballTracking) {
+    // Manual ball override — highest priority
+    s.gazeTargetActive = true;
+    trackWorldPoint(ball.position, dt, s, p);
+    return;
+  }
+
+  // Autonomous POI attention — drive system selected a target
+  const pois = window.pois;
+  if (pois && s.poiIdx >= 0 && s.poiIdx < pois.length) {
+    s.gazeTargetActive = true;
+    trackWorldPoint(pois[s.poiIdx].mesh.position, dt, s, p);
+    return;
+  }
+
+  // No active target — hand control back to idle saccade / micro-wander
+  s.gazeTargetActive = false;
 }
 
 // ── render — called after draw() each frame ──
@@ -3796,11 +3926,26 @@ function render() {
   if (s && p) {
     headGroup.rotation.y =  s.head3DYaw           * Math.PI / 180;
     headGroup.rotation.x =  s.head3DPitch         * Math.PI / 180;
-    headGroup.rotation.z = (s.head3DRoll   || 0)  * Math.PI / 180; // arc tilt into turn
+    headGroup.rotation.z = (s.head3DRoll   || 0)  * Math.PI / 180;
     robot.rotation.y     =  s.body3DYaw           * Math.PI / 180;
-    robot.rotation.x     = (s.bodyPitchArc || 0)  * Math.PI / 180; // arc lean into turn
+    robot.rotation.x     = (s.bodyPitchArc || 0)  * Math.PI / 180;
     applyColors();
     renderer.setClearColor(new THREE.Color(window.colors?.stageBg ?? '#0a0a0f'));
+
+    // POI visibility and novelty glow
+    const pois = window.pois || [];
+    pois.forEach((poi, i) => {
+      poi.mesh.visible = !!(p.showPOIs);
+      // Currently attended: bright; familiar: dimmer; novel: cyan glow
+      const isActive = s.poiIdx === i;
+      const fam = poi.familiarity;
+      const emissiveIntensity = isActive ? 0.6 : Math.max(0.05, 0.4 * (1 - fam));
+      poi.mesh.material.emissive.setHex(isActive ? 0x2af7c4 : 0x0a3328);
+      poi.mesh.material.emissiveIntensity = emissiveIntensity;
+      poi.mesh.material.opacity = isActive ? 1.0 : 0.5 + (1 - fam) * 0.4;
+      // Slow rotation for visibility
+      poi.mesh.rotation.y += 0.01;
+    });
   }
 
   controls.update();
