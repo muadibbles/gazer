@@ -55,6 +55,8 @@
 ### Dev tooling
 - [x] `send.py` — full event type list, data payloads (`x=`, `y=`, `z=`, `scale=`), `look3D` command
 - [x] `states.py` — scenario runner + interactive REPL with `speak`, `event`, `task`, `complete` commands
+- [x] `simulate.py` — synthetic sensor simulator; virtual person wanders, speaks, triggers sounds; `--fast`, `--once`, `--seed`, `--speed`
+- [x] `replay.py` — plays back a JSONL session at original cadence; `--speed`, `--loop`
 
 ---
 
