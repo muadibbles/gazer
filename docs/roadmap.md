@@ -85,6 +85,9 @@ Split `index.html` into deployable modules. Prerequisite for hardware targets.
 - [ ] `renderer.oled.js` — 1-bit pixel buffer for SSD1306/SH1106 via i2c
 - [ ] `renderer.servo.js` — maps gaze/lid/head values to servo positions via pigpio
 
+### Documentation
+- [ ] **README** — setup, dependencies, and usage for every script: `server.py`, `send.py`, `states.py`, `recorder.py`, `replay.py`, `simulate.py`, `face_detect.py`, `audio.py`, `time_scheduler.py`
+
 ### Testing
 - [ ] Unit tests — compositor, drive, transition enforcer (Node.js, no browser)
 - [ ] Browser tests — Playwright: compositor blending, micro-expression return, principles toggle
