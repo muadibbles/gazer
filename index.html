@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GAZER v0.10</title>
+  <title>GAZER v0.11</title>
   <script type="importmap">
   {
     "imports": {
@@ -587,7 +587,7 @@ input[type="checkbox"].grid-cb:checked::after {
 
 <header>
   <h1><span class="status-dot"></span>Gazer</h1>
-  <span>v0.10 — robot eye behavior system</span>
+  <span>v0.11 — robot eye behavior system</span>
 </header>
 
 <div class="left-panel">
@@ -2845,7 +2845,16 @@ requestAnimationFrame(loop);
 // ─────────────────────────────────────────────
 
 function saveConfig() {
-  localStorage.setItem('gazer_config', JSON.stringify({ params: { ...params }, colors: { ...colors } }));
+  const poiPositions = (window.pois || []).map(p => ({
+    x: p.mesh.position.x,
+    y: p.mesh.position.y,
+    z: p.mesh.position.z,
+  }));
+  localStorage.setItem('gazer_config', JSON.stringify({
+    params:       { ...params },
+    colors:       { ...colors },
+    poiPositions: poiPositions.length ? poiPositions : undefined,
+  }));
 }
 
 function loadConfig() {
@@ -2854,6 +2863,7 @@ function loadConfig() {
     if (!saved) return;
     if (saved.params) Object.assign(params, saved.params);
     if (saved.colors) Object.assign(colors, saved.colors);
+    // poiPositions applied by Three.js module after pois are created
   } catch (e) { /* ignore corrupt data */ }
 }
 
@@ -3757,6 +3767,19 @@ window.pois = POI_INIT.map(({ x, y, z, s, label, category, color }) => {
   return { mesh, salience: s, familiarity: 0, label, category, el };
 });
 
+// Apply any saved POI positions from localStorage (written by saveConfig in main script)
+try {
+  const saved = JSON.parse(localStorage.getItem('gazer_config'));
+  const positions = saved?.poiPositions;
+  if (positions) {
+    positions.forEach((pos, i) => {
+      if (window.pois[i] && pos) {
+        window.pois[i].mesh.position.set(pos.x, pos.y, pos.z);
+      }
+    });
+  }
+} catch (e) { /* ignore */ }
+
 // ── Drag interaction ──
 const raycaster  = new THREE.Raycaster();
 const mouse      = new THREE.Vector2();
@@ -3822,7 +3845,13 @@ function moveDrag(clientX, clientY) {
 }
 
 function endDrag() {
-  if (isDragging) { isDragging = false; dragMesh = null; controls.enabled = true; }
+  if (!isDragging) return;
+  const wasPOI = dragMesh !== null && dragMesh !== ball;
+  isDragging = false;
+  dragMesh   = null;
+  controls.enabled = true;
+  // Persist POI positions whenever one is moved
+  if (wasPOI && typeof window.saveConfig === 'function') window.saveConfig();
 }
 
 // Mouse
