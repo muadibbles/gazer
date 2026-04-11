@@ -987,10 +987,10 @@ const params = {
   // ── Nose ──
   showNose:        false,
   noseOffsetY:     55,   // pixels below eye center Y
-  noseBridgeH:     20,   // bridge height
-  noseWidth:       28,   // nostril spread
-  noseWingH:       8,    // how far nostrils drop below bridge base
-  noseWingCurve:   4,    // outward flare of nostril bezier
+  noseBridgeH:     20,   // vertical arm height (px)
+  noseWidth:       18,   // horizontal arm length (px)
+  noseWingH:       8,    // unused — kept for saved-config compat
+  noseWingCurve:   4,    // unused — kept for saved-config compat
   noseThickness:   6,
 
   // ── Mouth ──
@@ -2652,10 +2652,6 @@ function drawNose() {
 
   const mx      = params.eyeCenterX;
   const my      = params.eyeCenterY + params.noseOffsetY;
-  const bridgeH = params.noseBridgeH;
-  const halfW   = params.noseWidth / 2;
-  const wingH   = params.noseWingH;
-  const wingC   = params.noseWingCurve;
 
   ctx.save();
   ctx.strokeStyle = colors.noseColor;
@@ -2663,19 +2659,11 @@ function drawNose() {
   ctx.lineCap     = 'round';
   ctx.lineJoin    = 'round';
 
-  // Bridge — vertical line down from top
+  // L-shape: vertical drop, then horizontal arm to the right
   ctx.beginPath();
   ctx.moveTo(mx, my);
-  ctx.lineTo(mx, my + bridgeH);
-
-  // Left nostril wing — curves out and down from bridge base
-  ctx.moveTo(mx, my + bridgeH);
-  ctx.quadraticCurveTo(mx - wingC, my + bridgeH + wingH, mx - halfW, my + bridgeH + wingH);
-
-  // Right nostril wing
-  ctx.moveTo(mx, my + bridgeH);
-  ctx.quadraticCurveTo(mx + wingC, my + bridgeH + wingH, mx + halfW, my + bridgeH + wingH);
-
+  ctx.lineTo(mx, my + params.noseBridgeH);
+  ctx.lineTo(mx + params.noseWidth, my + params.noseBridgeH);
   ctx.stroke();
   ctx.restore();
 }
@@ -3705,10 +3693,8 @@ function buildControlPanels() {
     'panel-nose': [
       ['showNose',       'Visible',    'bool'],
       ['noseOffsetY',    'Height',      0,   200,  1,   0],
-      ['noseBridgeH',    'Bridge',      0,    60,  1,   0],
-      ['noseWidth',      'Width',       4,   100,  1,   0],
-      ['noseWingH',      'Wing drop',   0,    40,  1,   0],
-      ['noseWingCurve',  'Wing flare',  0,    40,  1,   0],
+      ['noseBridgeH',    'Drop',        0,    60,  1,   0],
+      ['noseWidth',      'Arm',         0,    80,  1,   0],
       ['noseThickness',  'Thickness',   1,    20,  1,   0],
     ],
     'panel-mouth': [
