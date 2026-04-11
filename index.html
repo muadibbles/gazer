@@ -762,24 +762,6 @@ input[type="checkbox"].grid-cb:checked::after {
     <button class="view-btn active" id="vbtn-perspective" onclick="setView('perspective')">Persp</button>
     <button class="view-btn" id="vbtn-4up"         onclick="setView('4up')">4-up</button>
   </div>
-  <div class="view-toggle-row" style="margin-top:6px;color:var(--muted);font-size:11px;letter-spacing:.04em;">BALL AXIS LOCKS</div>
-  <div class="view-toggle-row">
-    <input type="checkbox" class="grid-cb" id="lock-x" onchange="window.three?.setAxisLock('x',this.checked)"/>
-    <label for="lock-x">Lock X</label>
-    <input type="checkbox" class="grid-cb" id="lock-z" onchange="window.three?.setAxisLock('z',this.checked)" style="margin-left:10px;"/>
-    <label for="lock-z">Lock Z</label>
-  </div>
-  <div class="view-toggle-row" style="gap:6px;align-items:center;">
-    <label for="ball-y" style="white-space:nowrap;">Ball height</label>
-    <input type="range" id="ball-y" min="0.1" max="5" step="0.05" value="2.26" style="flex:1;"
-      oninput="window.three?.setBallY(+this.value)"/>
-  </div>
-  <div class="view-toggle-row" style="gap:6px;align-items:center;">
-    <label for="ball-timeout" style="white-space:nowrap;">Track timeout</label>
-    <input type="range" id="ball-timeout" min="0.5" max="10" step="0.5" value="3" style="flex:1;"
-      oninput="params.ballTrackTimeout=+this.value; document.getElementById('ball-timeout-val').textContent=this.value+'s'"/>
-    <span id="ball-timeout-val" style="color:var(--muted);font-size:11px;min-width:28px;">3s</span>
-  </div>
   <div id="poi-info">
     <div class="poi-info-head">
       <span id="poi-info-name">—</span>
@@ -4465,6 +4447,12 @@ ball.position.set(0, WR + C + C / 2, 2.5); // start at head height, in front
 ball.castShadow = true;
 scene.add(ball);
 
+// Y-drag handle — small upward cone sitting just above the ball
+const ballHandleMat = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x444444, transparent: true, opacity: 0.75 });
+const ballYHandle = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.14, 8), ballHandleMat);
+ballYHandle.position.set(0, 0.19, 0); // ball-local: just above the 0.12-radius sphere
+ball.add(ballYHandle); // moves with ball automatically
+
 // ── Points of Interest (POIs) — autonomous attention targets ──
 // Each has a label, category, salience, and color.
 // People > Pets > Objects in baseline salience.
@@ -4547,8 +4535,10 @@ const dragPlane  = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const dragPoint  = new THREE.Vector3();
 let   isDragging     = false;
 let   dragMesh       = null;  // ball or a POI mesh currently being dragged
-let   lockX          = false, lockZ = false;
+let   dragMode       = 'xz'; // 'xz' | 'ballY'
 let   timeSinceDrag  = Infinity; // starts in "timed out" state so idle runs first
+let   _yDragStartClientY = 0;
+let   _yDragStartBallY   = 0;
 const _headWorld     = new THREE.Vector3(); // pooled — reused every frame
 const _ballDir       = new THREE.Vector3();
 
@@ -4562,32 +4552,38 @@ function getMouseNDC(clientX, clientY) {
   mouse.y = -((clientY - rect.top)  / rect.height) * 2 + 1;
 }
 
-function setAxisLock(axis, locked) {
-  if (axis === 'x') lockX = locked;
-  if (axis === 'z') lockZ = locked;
-}
-
-function setBallY(y) { ball.position.y = Math.max(0.05, Math.min(6, y)); timeSinceDrag = 0; }
-
 function startDrag(clientX, clientY) {
   getMouseNDC(clientX, clientY);
   raycaster.setFromCamera(mouse, camera);
 
-  // Check ball first
-  if (raycaster.intersectObject(ball).length > 0) {
-    isDragging = true;
-    dragMesh   = ball;
-    controls.enabled = false;
+  // Y-handle — check before ball body so small handle is reachable
+  if (ball.visible && raycaster.intersectObject(ballYHandle).length > 0) {
+    isDragging          = true;
+    dragMesh            = ball;
+    dragMode            = 'ballY';
+    _yDragStartClientY  = clientY;
+    _yDragStartBallY    = ball.position.y;
+    controls.enabled    = false;
+    timeSinceDrag       = 0;
+    return true;
+  }
+  // Ball body — XZ drag on horizontal plane
+  if (ball.visible && raycaster.intersectObject(ball).length > 0) {
+    isDragging         = true;
+    dragMesh           = ball;
+    dragMode           = 'xz';
+    controls.enabled   = false;
     dragPlane.constant = -ball.position.y;
     return true;
   }
-  // Check POIs — hit if within 0.25 world units (generous for touch)
+  // POIs — XZ drag
   const poiMeshes = (window.pois || []).map(p => p.mesh);
   const hits = raycaster.intersectObjects(poiMeshes);
   if (hits.length > 0) {
-    isDragging = true;
-    dragMesh   = hits[0].object;
-    controls.enabled = false;
+    isDragging         = true;
+    dragMesh           = hits[0].object;
+    dragMode           = 'xz';
+    controls.enabled   = false;
     dragPlane.constant = -dragMesh.position.y;
     return true;
   }
@@ -4596,11 +4592,19 @@ function startDrag(clientX, clientY) {
 
 function moveDrag(clientX, clientY) {
   if (!isDragging || !dragMesh) return;
+  if (dragMode === 'ballY') {
+    // Screen-Y delta → world Y; 0.015 world-units per CSS pixel feels natural
+    const dy = (_yDragStartClientY - clientY) * 0.015;
+    ball.position.y = Math.max(0.1, Math.min(6, _yDragStartBallY + dy));
+    timeSinceDrag = 0;
+    return;
+  }
+  // XZ drag
   getMouseNDC(clientX, clientY);
   raycaster.setFromCamera(mouse, camera);
   if (raycaster.ray.intersectPlane(dragPlane, dragPoint)) {
-    if (!lockX) dragMesh.position.x = Math.max(-6, Math.min(6, dragPoint.x));
-    if (!lockZ) dragMesh.position.z = Math.max(-6, Math.min(6, dragPoint.z));
+    dragMesh.position.x = Math.max(-6, Math.min(6, dragPoint.x));
+    dragMesh.position.z = Math.max(-6, Math.min(6, dragPoint.z));
   }
 }
 
@@ -4786,20 +4790,30 @@ function render() {
 
       if (poi.fillEl) poi.fillEl.style.width = `${Math.round(attNorm * 100)}%`;
 
-      // Label projection — in 4-up mode, perspective lives in bottom-right quadrant
+      // Label projection — pick camera based on active view
       _labelPos.copy(poi.mesh.position);
       _labelPos.y += 0.45 + attNorm * 0.3;
-      _labelPos.project(camera);
-      const behind = _labelPos.z > 1;
       let sx, sy;
       if (fourUpMode) {
+        // Perspective quadrant (bottom-right)
+        _labelPos.project(camera);
         const hw = cw / 2, hh = ch / 2;
-        sx = (_labelPos.x * 0.5 + 0.5) * hw + hw;   // right half
-        sy = (-_labelPos.y * 0.5 + 0.5) * hh + hh;  // bottom half
+        sx = (_labelPos.x * 0.5 + 0.5) * hw + hw;
+        sy = (-_labelPos.y * 0.5 + 0.5) * hh + hh;
+      } else if (activeView === 'pov') {
+        _labelPos.project(povCamera);
+        sx = (_labelPos.x * 0.5 + 0.5) * cw;
+        sy = (-_labelPos.y * 0.5 + 0.5) * ch;
+      } else if (activeView === 'ceiling') {
+        _labelPos.project(ceilingCamera);
+        sx = (_labelPos.x * 0.5 + 0.5) * cw;
+        sy = (-_labelPos.y * 0.5 + 0.5) * ch;
       } else {
+        _labelPos.project(camera);
         sx = (_labelPos.x * 0.5 + 0.5) * cw;
         sy = (-_labelPos.y * 0.5 + 0.5) * ch;
       }
+      const behind = _labelPos.z > 1;
       poi.el.style.display = (show && !behind) ? 'block' : 'none';
       poi.el.style.left    = `${sx}px`;
       poi.el.style.top     = `${sy}px`;
@@ -4911,7 +4925,7 @@ function applyColors() {
   wheelMat.color.set(c.wheelColor);
 }
 
-window.three = { preUpdate, render, resize, applyColors, setAxisLock, setBallY, setFourUpMode, setActiveView };
+window.three = { preUpdate, render, resize, applyColors, setFourUpMode, setActiveView };
 </script>
 
 </body>
