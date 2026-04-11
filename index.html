@@ -181,6 +181,27 @@ canvas {
   margin-left: 4px;
 }
 
+.preset-btn-row {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  padding: 4px 0 2px;
+}
+.preset-btn {
+  flex: 1;
+  padding: 4px 0;
+  font-size: 11px;
+  background: var(--bg2);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.preset-btn:hover {
+  background: var(--accent);
+  color: #000;
+}
+
 input[type="range"] {
   width: 100%;
   -webkit-appearance: none;
@@ -383,6 +404,23 @@ button.active {
   margin-right: 6px;
   opacity: 0.6;
 }
+
+/* ── Live state monitor ── */
+.state-monitor {
+  font-size: 10px;
+  color: var(--text);
+  line-height: 2;
+  font-family: 'Space Mono', monospace;
+}
+.state-monitor .state-row {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  padding: 1px 0;
+}
+.state-monitor .state-key { color: var(--text); letter-spacing: 0.05em; }
+.state-monitor .state-val { color: var(--iris); font-weight: 700; }
+.state-monitor .state-val.changed { color: var(--accent); }
 
 /* POI info widget */
 #poi-info {
@@ -719,6 +757,49 @@ textarea.json-area {
   user-select: none;
 }
 
+/* ── Battery widget ── */
+.battery-widget {
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.battery-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.battery-label { color: var(--text); text-transform: uppercase; letter-spacing: 0.1em; }
+.battery-pct   { color: var(--fg); font-weight: 600; }
+.battery-bar-wrap {
+  height: 5px;
+  background: var(--bg2);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.battery-bar-fill {
+  height: 100%;
+  width: 100%;
+  background: #4af7c4;
+  border-radius: 3px;
+  transition: width 0.5s, background 0.5s;
+}
+.battery-state {
+  color: var(--text);
+  font-size: 10px;
+  margin-bottom: 5px;
+  text-transform: capitalize;
+}
+.battery-trigger, .battery-mobility {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 10px;
+  cursor: pointer;
+  margin-top: 3px;
+}
+
   </style>
 </head>
 <body>
@@ -735,6 +816,23 @@ textarea.json-area {
     <button class="view-btn" id="vbtn-ceiling"     onclick="setView('ceiling')">Ceiling</button>
     <button class="view-btn active" id="vbtn-perspective" onclick="setView('perspective')">Persp</button>
     <button class="view-btn" id="vbtn-4up"         onclick="setView('4up')">4-up</button>
+    <button class="view-btn" id="vbtn-travel"   onclick="setView('travel')">Travel Cam</button>
+  </div>
+  <div class="battery-widget">
+    <div class="battery-row">
+      <span class="battery-label">Battery</span>
+      <span class="battery-pct" id="battery-pct">100%</span>
+    </div>
+    <div class="battery-bar-wrap">
+      <div class="battery-bar-fill" id="battery-bar"></div>
+    </div>
+    <div class="battery-state" id="battery-state">charged</div>
+    <label class="battery-trigger">
+      <input type="checkbox" id="battery-force-low"> Trigger low battery
+    </label>
+    <label class="battery-mobility">
+      <input type="checkbox" id="mobility-enabled" checked> Mobility enabled
+    </label>
   </div>
   <div id="poi-info">
     <div class="poi-info-head">
@@ -776,6 +874,10 @@ textarea.json-area {
         </button>
       </div>
     </div></div>
+  </div>
+  <div id="state-monitor-wrap">
+    <div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:var(--text);padding:10px 0 6px;border-bottom:1px solid var(--border);margin-bottom:6px;">Live State</div>
+    <div class="state-monitor" id="state-monitor"></div>
   </div>
   <div class="log" id="log"></div>
 </div>
@@ -1191,15 +1293,17 @@ const params = {
   headTurnAmt:        0,   // px head shifts in 2D (slower, larger range)
   headTurnSpeed:      0.6, // lerp speed
   headRotationMax:    25,  // degrees — max 3D head yaw
-  head3DSpeed:        0.04, // lerp speed for 3D head yaw/pitch (independent of 2D cascade)
+  headMoveSpeed:      80,  // deg/s — speed of main head movement
+  headThreshold:      12,  // degrees — min turn size to trigger ant/overshoot
+  headAntAmt:         0.08,// anticipation as fraction of travel (0 = off)
+  headAntDur:         0.08,// anticipation duration (seconds)
+  headOvAmt:          0.12,// overshoot as fraction of travel past target (0 = off)
+  headOvDur:          0.15,// total overshoot + return duration (seconds)
   bodyShiftAmt:       0,   // px body shifts in 2D (slowest)
   bodyShiftSpeed:     0.3, // lerp speed
   bodyRotationMax:    10,  // degrees — max 3D body yaw
-  body3DSpeed:        0.02, // spring stiffness scale for 3D body yaw
   ballTrackTimeout:   3,   // seconds before reverting to idle wander after drag ends
   transitionDur:      0.3, // seconds to blend between compositor states
-  headSpringDamp:     14,  // head rotation spring damping (higher = less overshoot)
-  bodySpringDamp:     12,  // body rotation spring damping
   headArcFactor:      0.12, // head tilt per (deg/s) yaw velocity — arc in turns
   bodyArcFactor:      0.08, // body lean per (deg/s) rotation — arc in turns
 
@@ -1261,6 +1365,12 @@ const params = {
 
   // ── 12 Principles master switch ──
   principlesEnabled: true,  // false = mechanical baseline (no arcs, easing, squash, cascade, overshoot)
+
+  // ── Battery ──
+  battDrainMove:  0.020, // fractional drain per second while moving (0.02 = 0.02%/s)
+  battDrainMind:  0.010, // fractional drain per second during active tracking/behavior
+  battDrainIdle:  0.005, // fractional drain per second while stationary and idle
+  battChargeRate: 0.030, // fractional charge per second at charger
 };
 
 // ── Color params ──
@@ -1403,12 +1513,21 @@ const state = {
   head3DYaw:      0,  // degrees, positive = right
   head3DPitch:    0,  // degrees, positive = down
   body3DYaw:      0,  // degrees, positive = right
-  head3DYawVel:   0,  // deg/s — spring velocity
-  head3DPitchVel: 0,
-  body3DYawVel:   0,
   head3DRoll:     0,  // deg — tilt from arc motion during turns
   bodyPitchArc:   0,  // deg — lean from arc motion during body rotation
   gazeTargetActive: false, // true while ball drag overrides body rotation
+
+  // Head motion profile state machines (one per axis)
+  headYawMotion: {
+    phase: 'idle',      // 'idle'|'ant'|'move'|'ov'|'return'
+    startAngle: 0, targetAngle: 0, cur: 0,
+    t: 0, dur: 0, ovAngle: 0, wasLarge: false,
+  },
+  headPitchMotion: {
+    phase: 'idle',
+    startAngle: 0, targetAngle: 0, cur: 0,
+    t: 0, dur: 0, ovAngle: 0, wasLarge: false,
+  },
 
   // Squash & stretch
   squashAmt:   0,   // current deformation (+ = stretch along travel, - = squash)
@@ -2337,6 +2456,118 @@ function updateBlink(dt) {
 //  UPDATE LOOP
 // ─────────────────────────────────────────────
 
+// Advance one axis of the head motion profile state machine.
+// m = the motion state object, dt = frame delta, target = desired angle in degrees, p = params
+function advanceAxisMotion(m, dt, target, p) {
+  const smallThreshold = 2; // degrees — below this just lerp, no effect
+  const moveDelta = Math.abs(target - m.cur);
+
+  // If target moved significantly from what we're tracking, interrupt and restart move
+  const targetChanged = Math.abs(target - m.targetAngle) > 0.8 && m.phase !== 'ant';
+  if (targetChanged && m.phase !== 'idle') {
+    m.startAngle  = m.cur;
+    m.targetAngle = target;
+    m.wasLarge    = moveDelta >= p.headThreshold;
+    m.phase       = 'move';
+    m.t           = 0;
+    m.dur         = Math.max(0.05, moveDelta / p.headMoveSpeed);
+  }
+
+  if (m.phase === 'idle') {
+    const delta = Math.abs(target - m.cur);
+    if (delta < smallThreshold) {
+      // Tiny correction — just lerp, no effect
+      m.cur += (target - m.cur) * Math.min(1, dt * (p.headMoveSpeed / 10));
+    } else {
+      // Start a new motion
+      m.startAngle  = m.cur;
+      m.targetAngle = target;
+      m.wasLarge    = delta >= p.headThreshold;
+      m.t = 0;
+      if (m.wasLarge && p.headAntAmt > 0) {
+        m.phase = 'ant';
+        m.dur   = p.headAntDur;
+      } else {
+        m.phase = 'move';
+        m.dur   = Math.max(0.05, delta / p.headMoveSpeed);
+      }
+    }
+  }
+
+  // Smoothstep helper
+  const ss = (t) => t * t * (3 - 2 * t);
+
+  if (m.phase === 'ant') {
+    m.t += dt;
+    const prog = Math.min(1, m.t / Math.max(0.001, m.dur));
+    const antTarget = m.startAngle - Math.sign(m.targetAngle - m.startAngle)
+                      * Math.abs(m.targetAngle - m.startAngle) * p.headAntAmt;
+    m.cur = m.startAngle + (antTarget - m.startAngle) * ss(prog);
+    if (m.t >= m.dur) {
+      m.startAngle = m.cur;
+      m.phase = 'move';
+      m.t   = 0;
+      m.dur = Math.max(0.05, Math.abs(m.targetAngle - m.cur) / p.headMoveSpeed);
+    }
+  }
+
+  if (m.phase === 'move') {
+    m.t += dt;
+    const prog = Math.min(1, m.t / Math.max(0.001, m.dur));
+    m.cur = m.startAngle + (m.targetAngle - m.startAngle) * ss(prog);
+    if (m.t >= m.dur) {
+      m.cur = m.targetAngle;
+      if (m.wasLarge && p.headOvAmt > 0) {
+        m.phase    = 'ov';
+        m.ovAngle  = m.targetAngle + Math.sign(m.targetAngle - m.startAngle)
+                     * Math.abs(m.targetAngle - m.startAngle) * p.headOvAmt;
+        m.startAngle = m.cur;
+        m.t   = 0;
+        m.dur = p.headOvDur * 0.4; // reach peak overshoot in 40% of ovDur
+      } else {
+        m.phase = 'idle';
+      }
+    }
+  }
+
+  if (m.phase === 'ov') {
+    m.t += dt;
+    const prog = Math.min(1, m.t / Math.max(0.001, m.dur));
+    m.cur = m.startAngle + (m.ovAngle - m.startAngle) * ss(prog);
+    if (m.t >= m.dur) {
+      m.startAngle = m.cur;
+      m.phase = 'return';
+      m.t   = 0;
+      m.dur = p.headOvDur * 0.6; // return in remaining 60%
+    }
+  }
+
+  if (m.phase === 'return') {
+    m.t += dt;
+    const prog = Math.min(1, m.t / Math.max(0.001, m.dur));
+    m.cur = m.startAngle + (m.targetAngle - m.startAngle) * ss(prog);
+    if (m.t >= m.dur) {
+      m.cur   = m.targetAngle;
+      m.phase = 'idle';
+    }
+  }
+
+  return m.cur;
+}
+
+function advanceHeadMotion(s, dt, yawTargetDeg, pitchTargetDeg, p) {
+  s.head3DYaw   = advanceAxisMotion(s.headYawMotion,   dt, yawTargetDeg,   p);
+  s.head3DPitch = advanceAxisMotion(s.headPitchMotion, dt, pitchTargetDeg, p);
+
+  // Arc roll — lerp toward velocity-approximated tilt
+  const yawVel = (s.head3DYaw - (s._prevHeadYaw || 0)) / Math.max(dt, 0.001);
+  s._prevHeadYaw = s.head3DYaw;
+  const arcLerp = (cur, tgt, spd) => cur + (tgt - cur) * Math.min(1, spd * dt);
+  s.head3DRoll = Math.max(-20, Math.min(20,
+    arcLerp(s.head3DRoll || 0, -yawVel * p.headArcFactor, 10)));
+}
+window.advanceHeadMotion = advanceHeadMotion;
+
 function update(dt) {
   const beh = getBehavior();
   const arc  = state.arc;  // used in arc animation and squash sections
@@ -2451,29 +2682,17 @@ function update(dt) {
   state.bodyY = lerp(state.bodyY, state.gazeY * params.bodyShiftAmt,     params.bodyShiftSpeed);
 
   // 3D rotation — bypassed when Three.js tracking is active
-  // Spring physics (Principles 5 + 6): natural ease-in/out + follow-through overshoot
+  // Motion profile system (3-phase: anticipation → move → overshoot/return)
   if (!state.gazeTargetActive) {
-    const springZeta = params.principlesEnabled ? 0.7 : 1.0; // 0.7 = overshoot; 1.0 = no overshoot
-    const headStiff = params.head3DSpeed * 200;
-    const headDamp  = 2 * Math.sqrt(headStiff) * springZeta;
-    const bodyStiff = params.body3DSpeed * 200;
-    const bodyDamp  = 2 * Math.sqrt(bodyStiff) * springZeta;
+    const yawTarget   = state.gazeX * params.headRotationMax;
+    const pitchTarget = state.gazeY * params.headRotationMax * 0.35;
+    advanceHeadMotion(state, dt, yawTarget, pitchTarget, params);
 
-    const headYawAcc    = headStiff * (state.gazeX * params.headRotationMax - state.head3DYaw) - headDamp * state.head3DYawVel;
-    state.head3DYawVel += headYawAcc * dt;
-    state.head3DYaw    += state.head3DYawVel * dt;
-
-    const headPitchAcc    = headStiff * (state.gazeY * params.headRotationMax * 0.35 - state.head3DPitch) - headDamp * state.head3DPitchVel;
-    state.head3DPitchVel += headPitchAcc * dt;
-    state.head3DPitch    += state.head3DPitchVel * dt;
-
-    const bodyYawAcc    = bodyStiff * (state.gazeX * params.bodyRotationMax - state.body3DYaw) - bodyDamp * state.body3DYawVel;
-    state.body3DYawVel += bodyYawAcc * dt;
-    state.body3DYaw    += state.body3DYawVel * dt;
-
-    // Arc motion (Principle 7): head tilts + body leans into turns
-    state.head3DRoll   = Math.max(-20, Math.min(20, -state.head3DYawVel * params.headArcFactor));
-    state.bodyPitchArc = Math.max(-10, Math.min(10, -state.body3DYawVel * params.bodyArcFactor));
+    // Body arc (lean into turns) — still driven by body3DYaw which is
+    // set by the Three.js module's drive system, not by us here.
+    const arcLerp = (cur, tgt, spd) => cur + (tgt - cur) * Math.min(1, spd * dt);
+    state.bodyPitchArc = Math.max(-10, Math.min(10,
+      arcLerp(state.bodyPitchArc || 0, 0, 4))); // decay arc toward 0 when body still
   }
 
   // ── Squash & stretch ──
@@ -3301,10 +3520,28 @@ function loop(ts) {
   const dt = Math.min((ts - lastTime) / 1000, 0.05);
   lastTime = ts;
 
+  // Update battery widget — reads window.batteryLevel (0..1) set by Three.js module
+  const batPct   = Math.round((window.batteryLevel ?? 1) * 100);
+  const batBar   = document.getElementById('battery-bar');
+  const batPctEl = document.getElementById('battery-pct');
+  const batState = document.getElementById('battery-state');
+  if (batBar) {
+    batBar.style.width      = batPct + '%';
+    // Color: green > 40%, yellow 15–40%, red <= 15%
+    batBar.style.background = batPct > 40 ? '#4af7c4' : batPct > 15 ? '#ffcc44' : '#ff4444';
+  }
+  if (batPctEl) batPctEl.textContent = batPct + '%';
+  if (batState) {
+    // Show mobility state from Three.js drive state, fall back to 'idle'
+    const ds = window.driveState;
+    batState.textContent = ds ? ds.mobilityState : 'idle';
+  }
+
   if (window.three) window.three.preUpdate(dt); // gaze override before physics
   update(dt);
   draw();
   if (window.three) window.three.render();
+  updateStateMonitor();
   requestAnimationFrame(loop);
 }
 
@@ -3324,6 +3561,14 @@ function saveConfig() {
     params:       { ...params },
     colors:       { ...colors },
     poiPositions: poiPositions.length ? poiPositions : undefined,
+    cameras:      window.three?.getCameras(),
+    // Persist robot pose and battery level across page reloads
+    drive: window.driveState ? {
+      x:       window.driveState.drivePos?.x  || 0,
+      z:       window.driveState.drivePos?.z  || 0,
+      yaw:     window.driveState.driveYaw     || 0,
+      battery: window.batteryLevel            ?? 1,
+    } : undefined,
   }));
 }
 
@@ -3357,8 +3602,8 @@ function setView(v) {
   window.three?.setFourUpMode(is4up);
   if (!is4up && is3d) window.three?.setActiveView(v);
 
-  // Highlight active button
-  ['face','pov','ceiling','perspective','4up'].forEach(id => {
+  // Highlight active button — include all view IDs so travel button highlights correctly
+  ['face','pov','ceiling','perspective','4up','travel'].forEach(id => {
     const btn = document.getElementById('vbtn-' + id);
     if (btn) btn.classList.toggle('active', id === v);
   });
@@ -3622,7 +3867,8 @@ const ruleTable = {
   // ── Presence ──
   face_detected:   [
     { pressure: 'attentive',     add: 0.60 },
-    { action: 'look3D',          cat: 'person' },
+    // cameraLocal:true → x/y/z from detector are camera-relative; transform to world coords
+    { action: 'look3D',          cat: 'person', cameraLocal: true },
     // familiar face → pleased recognition; new face → curious
     { action: 'microAuto', low: 'curious', lowDur: 0.20, high: 'pleased', highDur: 0.35 },
   ],
@@ -3765,12 +4011,21 @@ function emitDriveEvent(eventName, data) {
         addPressure(rule.pressure, rule.add * scale);
 
       } else if (rule.action === 'look3D') {
-        look3D(
-          data.x  != null ? +data.x  : null,
-          data.y  != null ? +data.y  : null,
-          data.z  != null ? +data.z  : null,
-          rule.cat || null
-        );
+        let lx = data.x  != null ? +data.x  : null;
+        let ly = data.y  != null ? +data.y  : null;
+        let lz = data.z  != null ? +data.z  : null;
+        // If rule specifies cameraLocal:true, transform camera-relative → world coords
+        // using the robot's current pose (yaw around Y axis, position in XZ plane)
+        if (rule.cameraLocal && lx != null && lz != null) {
+          const pose = window.three?.getRobotPose?.();
+          if (pose) {
+            const yaw = pose.yaw;
+            const wx = pose.x + lx * Math.cos(yaw) + lz * Math.sin(yaw);
+            const wz = pose.z - lx * Math.sin(yaw) + lz * Math.cos(yaw);
+            lx = wx; lz = wz;
+          }
+        }
+        look3D(lx, ly, lz, rule.cat || null);
 
       } else if (rule.action === 'setAttn') {
         setAttn(rule.value);
@@ -3985,13 +4240,15 @@ function buildControlPanels() {
       ['headTurnAmt',       'Head turn',      0,   80,  1,    0],
       ['headTurnSpeed',     '↳ Speed',        0.1,  4,  0.1,  1, true],
       ['headRotationMax',   '↳ 3D yaw (°)',   0,   45,   1,     0,    true],
-      ['head3DSpeed',       '↳ 3D settle',   0.005,0.3,  0.005, 3,    true],
+      ['headMoveSpeed',     '↳ Head speed',  10,  200,  5,     0,    true],
+      ['headThreshold',     '↳ Ant threshold',2,   30,  1,     0,    true],
+      ['headAntAmt',        '↳ Anticipation', 0,  0.4,  0.01,  2,    true],
+      ['headAntDur',        '↳ Ant duration', 0.02,0.3, 0.01,  2,    true],
+      ['headOvAmt',         '↳ Overshoot',    0,  0.5,  0.01,  2,    true],
+      ['headOvDur',         '↳ Ov duration',  0.05,0.4, 0.01,  2,    true],
       ['bodyShiftAmt',      'Body shift',     0,  100,   1,     0],
       ['bodyShiftSpeed',    '↳ Speed',        0.05, 2,   0.05,  2,    true],
       ['bodyRotationMax',   '↳ 3D yaw (°)',   0,   30,   1,     0,    true],
-      ['body3DSpeed',       '↳ 3D settle',   0.005,0.2,  0.005, 3,    true],
-      ['headSpringDamp',    '↳ Head damp',   2,   30,   0.5,   1,    true],
-      ['bodySpringDamp',    '↳ Body damp',   2,   30,   0.5,   1,    true],
       ['headArcFactor',     'Head arc tilt', 0,   0.5,  0.01,  2],
       ['bodyArcFactor',     '↳ Body lean',   0,   0.3,  0.01,  2,    true],
     ],
@@ -4046,6 +4303,21 @@ function buildControlPanels() {
       if (args[2] === 'bool') {
         const { row } = makeCheckbox(args[0], args[1]);
         panel.appendChild(row);
+      } else if (args[2] === 'presets') {
+        // Preset button row — args[3] is array of {name, values}
+        const row = document.createElement('div');
+        row.className = 'control-row preset-btn-row';
+        args[3].forEach(preset => {
+          const btn = document.createElement('button');
+          btn.textContent = preset.name;
+          btn.className = 'preset-btn';
+          btn.onclick = () => {
+            Object.assign(window.params, preset.values);
+            syncAllSliders();
+          };
+          row.appendChild(btn);
+        });
+        panel.appendChild(row);
       } else {
         const child = args[6]; // optional child-indent flag
         const { row, inp } = makeSlider(...args.slice(0, 6));
@@ -4070,6 +4342,43 @@ function syncAllSliders() {
   });
 }
 
+// ─────────────────────────────────────────────
+//  LIVE STATE MONITOR
+//  Updates the panel display every frame so you
+//  can watch state values change in real time.
+// ─────────────────────────────────────────────
+
+const stateMonitorEl = document.getElementById('state-monitor');
+const prevStateDisplay = {}; // track prev values to flash red on change
+
+function updateStateMonitor() {
+  if (!stateMonitorEl) return;
+
+  // Pick the most useful state fields to show
+  const rows = [
+    ['behavior',    state.behavior],
+    ['beh.timer',   state.behaviorTimer.toFixed(2)],
+    ['gaze.x',      state.gazeX.toFixed(3)],
+    ['gaze.y',      state.gazeY.toFixed(3)],
+    ['arc.active',  state.arc.active ? 'YES' : 'no'],
+    ['arc.t',       state.arc.active ? state.arc.t.toFixed(3) : '—'],
+    ['arc.end.x',   state.arc.endX.toFixed(3)],
+    ['arc.end.y',   state.arc.endY.toFixed(3)],
+    ['blink.state', state.blink.state],
+    ['blink.t',     state.blink.t.toFixed(3)],
+    ['active.task', state.activeTask ? state.activeTask.action : 'none'],
+  ];
+
+  stateMonitorEl.innerHTML = rows.map(([key, val]) => {
+    const changed = prevStateDisplay[key] !== undefined && prevStateDisplay[key] !== String(val);
+    prevStateDisplay[key] = String(val);
+    return `<div class="state-row">
+      <span class="state-key">${key}</span>
+      <span class="state-val${changed ? ' changed' : ''}">${val}</span>
+    </div>`;
+  }).join('');
+}
+
 const logEl = document.getElementById('log');
 const logHistory = [];
 
@@ -4086,6 +4395,31 @@ loadConfig();
 buildControlPanels();
 buildColorPanel();
 syncAllSliders();
+
+// ── Battery force-low checkbox ──
+// Sets window.batteryForceLow = true as a one-shot trigger; Three.js module reads this
+// and sets battery to 0.08, then clears both window.batteryForceLow and its local flag.
+const forceLowCb = document.getElementById('battery-force-low');
+if (forceLowCb) {
+  forceLowCb.addEventListener('change', function() {
+    if (this.checked) {
+      window.batteryForceLow = true; // Three.js module polls this each frame
+      this.checked = false;          // auto-uncheck — one-shot trigger, not a toggle
+    }
+  });
+}
+
+// ── Mobility enabled checkbox ──
+// Sets window.mobilityEnabled (bool); Three.js module reads this each frame.
+// Default to true so the robot can move on load.
+window.mobilityEnabled = true;
+const mobilCb = document.getElementById('mobility-enabled');
+if (mobilCb) {
+  mobilCb.addEventListener('change', function() {
+    window.mobilityEnabled = this.checked;
+  });
+}
+
 // Expose to Three.js module (const at top-level non-module script doesn't auto-assign to window)
 window.state  = state;
 window.params = params;
@@ -4357,11 +4691,6 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
 camera.position.set(0, 2.2, 7);
 
-// Future: traveling camera constrained to robot XZ, aimed at body.
-// Swap renderer.render(scene, camera) → renderer.render(scene, travelCam)
-// when driving mode is active.
-// const travelCam = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
-
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 1.4, 0);
 controls.enableDamping  = true;
@@ -4390,9 +4719,26 @@ ceilingControls.maxDistance   = 60;
 ceilingControls.enabled       = false;
 ceilingControls.update();
 
+// ── Travel camera — orbit-controlled, target follows robot ───────────────
+const travelCamera = new THREE.PerspectiveCamera(55, 1, 0.1, 100);
+// Start behind and above the robot at a useful vantage point
+travelCamera.position.set(0, 2.8, -3.2);
+
+const travelControls = new OrbitControls(travelCamera, renderer.domElement);
+travelControls.target.set(0, 1.6, 0);  // upper-body height
+travelControls.enableDamping = true;
+travelControls.dampingFactor = 0.08;
+travelControls.minDistance   = 0.5;
+travelControls.maxDistance   = 20;
+travelControls.enabled       = false;
+travelControls.update();
+
+// Track robot world position so we can translate the orbit target with it
+const _travelLastRobotPos = new THREE.Vector3(0, 0, 0);
+
 // ── Multi-camera state ────────────────────────────────────────────────────
 let fourUpMode = false;
-let activeView = 'perspective'; // 'perspective' | 'pov' | 'ceiling'
+let activeView = 'perspective'; // 'perspective' | 'pov' | 'ceiling' | 'travel'
 
 // Pooled vectors for POV camera update (avoid GC pressure)
 const _povHeadPos  = new THREE.Vector3();
@@ -4466,20 +4812,26 @@ const WR = 0.46;   // wheel radius
 const WT = 0.16;   // wheel tread thickness
 const R  = 0.07;   // box corner radius
 
-// ── Robot group (whole robot rotates for body yaw) ──
+// ── Robot group (yaw only — wheels live here so they always touch the ground) ──
 const robot = new THREE.Group();
 scene.add(robot);
+
+// Upper body group — body + head pitch/lean without lifting the wheels
+// Pivot is at ground level (y=0 in robot-local space) so the lean reads
+// as weight-shift rather than floating.
+const upperBody = new THREE.Group();
+robot.add(upperBody);
 
 // Body cube
 const body = new THREE.Mesh(new RoundedBoxGeometry(C, C, C, 3, R), robotMat);
 body.position.y = WR + C / 2;
 body.castShadow  = true;
-robot.add(body);
+upperBody.add(body);
 
 // Head group (rotates independently for gaze)
 const headGroup = new THREE.Group();
 headGroup.position.y = WR + C + C / 2;
-robot.add(headGroup);
+upperBody.add(headGroup);
 
 const head = new THREE.Mesh(new RoundedBoxGeometry(C, C, C, 3, R), robotMat);
 head.castShadow = true;
@@ -4494,12 +4846,16 @@ headGroup.add(screen);
 const wheelGeo  = new THREE.CylinderGeometry(WR, WR, WT, 28);
 const hubGeo    = new THREE.CylinderGeometry(WR * 0.76, WR * 0.76, WT + 0.005, 20);
 const hubCapMat = new THREE.MeshLambertMaterial({ color: 0xc8c8c4 });
+// Save left/right wheel refs so we can animate rolling each frame
+let leftWheel, rightWheel;
 [-1, 1].forEach(side => {
   const wheel = new THREE.Mesh(wheelGeo, wheelMat);
   wheel.rotation.z  = Math.PI / 2;
   wheel.position.set(side * (C / 2 + WT / 2 + 0.02), WR, 0);
   wheel.castShadow  = true;
   robot.add(wheel);
+  // side === -1 is the left wheel (negative X)
+  if (side === -1) leftWheel = wheel; else rightWheel = wheel;
 
   // Hub cap — slightly proud of each face
   const hub = new THREE.Mesh(hubGeo, hubCapMat);
@@ -4507,6 +4863,36 @@ const hubCapMat = new THREE.MeshLambertMaterial({ color: 0xc8c8c4 });
   hub.position.set(side * (C / 2 + WT / 2 + 0.02), WR, 0);
   robot.add(hub);
 });
+
+// ── Drive system state ──────────────────────────────────────────────────────
+const TRACK_WIDTH   = C + WT + 0.04;  // distance between wheel centers (~1.40 m)
+const FLOOR_LIMIT   = 13.0;           // max distance from center robot can travel
+const ROBOT_RADIUS  = 0.8;            // used for obstacle checks
+
+let drivePos    = new THREE.Vector3(0, 0, 0); // robot world position (x, z relevant)
+let driveYaw    = 0;           // heading in radians (positive = left / CCW)
+let driveV      = 0;           // current linear velocity m/s
+let driveOmega  = 0;           // current angular velocity rad/s
+let leftWheelAngle  = 0;       // cumulative wheel rotation for animation
+let rightWheelAngle = 0;
+
+// Mobility planner state
+let mobilityEnabled  = true;
+let mobilityState    = 'hold';  // 'hold' | 'wander' | 'approach' | 'scan' | 'returning' | 'charging'
+let mobilityGoal     = null;    // {x, z} in world space, or null
+let mobilityTimer    = 0;       // seconds spent in current wander leg
+let mobilityLegDone  = false;
+
+// Battery (fraction 0..1 where 1.0 = full charge)
+let battery          = 1.0;
+let batteryForceLow  = false;   // dev toggle: snap battery to critically low
+
+// Spatial memory — 0.5 m grid over ±FLOOR_LIMIT area
+// Stores the gameTime when each cell was last visited; 0 = never visited.
+const SMEM_RES  = 0.5;
+const SMEM_N    = Math.ceil(FLOOR_LIMIT * 2 / SMEM_RES);
+const spatialMemory = new Float32Array(SMEM_N * SMEM_N);
+let gameTime = 0; // running simulation time in seconds
 
 // ── Resize ──
 function resize() {
@@ -4567,6 +4953,9 @@ const POI_INIT = [
   // index 7
   { x: -0.9, y: 1.5, z: 3.8, s: 0.9, label: 'Front Door', category: 'object', color: 0xaa88ff,
     affordances: ['arrival', 'departure'] },
+  // index 8 — Charger dock (robot returns here when battery is low)
+  { x: 0.0, y: 0.3, z: -4.0, s: 0.2, label: 'Charger', category: 'charger', color: 0xffe033,
+    affordances: ['charge'] },
 ];
 
 const poiGeo = new THREE.OctahedronGeometry(0.30, 0); // 3× original size
@@ -4630,8 +5019,8 @@ let   dragMode       = 'xz'; // 'xz' | 'ballY'
 let   timeSinceDrag  = Infinity; // starts in "timed out" state so idle runs first
 let   _yDragStartClientY = 0;
 let   _yDragStartBallY   = 0;
-const _headWorld     = new THREE.Vector3(); // pooled — reused every frame
-const _ballDir       = new THREE.Vector3();
+const _headWorld        = new THREE.Vector3(); // pooled — reused every frame
+const _ballDir          = new THREE.Vector3();
 
 // Use the renderer canvas directly for NDC so coordinates are always correct
 // regardless of how the canvas sits inside its container.
@@ -4643,9 +5032,24 @@ function getMouseNDC(clientX, clientY) {
   mouse.y = -((clientY - rect.top)  / rect.height) * 2 + 1;
 }
 
+// Return whichever camera is currently rendering the main interactive view
+function getActiveCamera() {
+  if (activeView === 'ceiling') return ceilingCamera;
+  if (activeView === 'pov')     return povCamera;
+  return camera; // perspective + 4-up fall back to main perspective cam
+}
+
+// Disable all orbit controls before a drag; endDrag restores the right one
+function disableAllControls() {
+  controls.enabled        = false;
+  ceilingControls.enabled = false;
+  travelControls.enabled  = false;
+}
+
 function startDrag(clientX, clientY) {
   getMouseNDC(clientX, clientY);
-  raycaster.setFromCamera(mouse, camera);
+  const activeCam = getActiveCamera();
+  raycaster.setFromCamera(mouse, activeCam);
 
   // Y-handle — check before ball body so small handle is reachable
   if (ball.visible && raycaster.intersectObject(ballYHandle).length > 0) {
@@ -4654,7 +5058,7 @@ function startDrag(clientX, clientY) {
     dragMode            = 'ballY';
     _yDragStartClientY  = clientY;
     _yDragStartBallY    = ball.position.y;
-    controls.enabled    = false;
+    disableAllControls();
     timeSinceDrag       = 0;
     return true;
   }
@@ -4663,7 +5067,7 @@ function startDrag(clientX, clientY) {
     isDragging         = true;
     dragMesh           = ball;
     dragMode           = 'xz';
-    controls.enabled   = false;
+    disableAllControls();
     dragPlane.constant = -ball.position.y;
     return true;
   }
@@ -4674,7 +5078,7 @@ function startDrag(clientX, clientY) {
     isDragging         = true;
     dragMesh           = hits[0].object;
     dragMode           = 'xz';
-    controls.enabled   = false;
+    disableAllControls();
     dragPlane.constant = -dragMesh.position.y;
     return true;
   }
@@ -4690,9 +5094,9 @@ function moveDrag(clientX, clientY) {
     timeSinceDrag = 0;
     return;
   }
-  // XZ drag
+  // XZ drag — must use the same camera that rendered the current view
   getMouseNDC(clientX, clientY);
-  raycaster.setFromCamera(mouse, camera);
+  raycaster.setFromCamera(mouse, getActiveCamera());
   if (raycaster.ray.intersectPlane(dragPlane, dragPoint)) {
     dragMesh.position.x = Math.max(-6, Math.min(6, dragPoint.x));
     dragMesh.position.z = Math.max(-6, Math.min(6, dragPoint.z));
@@ -4705,7 +5109,10 @@ function endDrag() {
   isDragging = false;
   dragMesh   = null;
   dragMode   = 'xz';
-  controls.enabled = true;
+  // Restore whichever controls belong to the current view
+  controls.enabled        = (activeView === 'perspective' || fourUpMode);
+  ceilingControls.enabled = (activeView === 'ceiling'     || fourUpMode);
+  travelControls.enabled  = (activeView === 'travel'      && !fourUpMode);
   if (wasPOI && typeof window.saveConfig === 'function') window.saveConfig();
 }
 
@@ -4731,6 +5138,156 @@ canvas3d.addEventListener('touchmove', e => {
 canvas3d.addEventListener('touchend',   endDrag);
 canvas3d.addEventListener('touchcancel', endDrag);
 
+// ── Mobility helper functions ─────────────────────────────────────────────
+
+// Map behavior name → target linear speed (m/s). 0 = stationary.
+function getMobilitySpeed() {
+  const behavior = window.state?.behavior || 'idle';
+  const map = {
+    resting: 0, sleepy: 0, idle: 0.25, curious: 0.45,
+    alert: 0, excited: 0.6, watching: 0, listening: 0,
+    attentive: 0.3, engaged: 0, searching: 0.35,
+  };
+  return mobilityEnabled ? (map[behavior] ?? 0.25) : 0;
+}
+
+// Spatial memory helpers — convert world XZ to flat array index
+function smemIdx(x, z) {
+  const col = Math.floor((x + FLOOR_LIMIT) / SMEM_RES);
+  const row = Math.floor((z + FLOOR_LIMIT) / SMEM_RES);
+  const c = Math.max(0, Math.min(SMEM_N - 1, col));
+  const r = Math.max(0, Math.min(SMEM_N - 1, row));
+  return r * SMEM_N + c;
+}
+function smemVisit(x, z) {
+  // Stamp the current cell with the current game time
+  spatialMemory[smemIdx(x, z)] = gameTime;
+}
+function smemNovelty(x, z) {
+  // Returns 0..1: 1 = never visited, 0 = just visited
+  // Saturates back to 1 after 2 minutes of absence
+  const lastVisit = spatialMemory[smemIdx(x, z)];
+  if (lastVisit === 0) return 1;
+  return Math.min(1, (gameTime - lastVisit) / 120);
+}
+
+// Score a POI as a wander destination (higher = more desirable)
+function scorePOI(poi) {
+  // Never wander toward the charger dock
+  if (poi.category === 'charger') return 0;
+  const dx = poi.mesh.position.x - drivePos.x;
+  const dz = poi.mesh.position.z - drivePos.z;
+  const dist = Math.sqrt(dx * dx + dz * dz) + 0.1;
+  const novelty = smemNovelty(poi.mesh.position.x, poi.mesh.position.z);
+  return (poi.salience / (1 + poi.familiarity)) * novelty / (1 + dist * 0.1);
+}
+
+// Compute obstacle repulsion force at position (x, z)
+// Returns {fx, fz} — a nudge vector to blend with the goal direction
+function computeRepulsion(x, z) {
+  let fx = 0, fz = 0;
+  const pois = window.pois || [];
+  for (const poi of pois) {
+    // People and pets are not treated as physical obstacles
+    if (poi.category === 'person' || poi.category === 'pet') continue;
+    const dx = x - poi.mesh.position.x;
+    const dz = z - poi.mesh.position.z;
+    const d  = Math.sqrt(dx * dx + dz * dz) + 0.001;
+    const repelDist = 1.5;
+    if (d < repelDist) {
+      const strength = (repelDist - d) / repelDist;
+      fx += (dx / d) * strength * 2.5;
+      fz += (dz / d) * strength * 2.5;
+    }
+  }
+  // Soft wall — push away from floor boundary
+  const boundRepel = 1.5;
+  if (x >  FLOOR_LIMIT - boundRepel) fx -= (x - (FLOOR_LIMIT - boundRepel));
+  if (x < -(FLOOR_LIMIT - boundRepel)) fx -= (x + (FLOOR_LIMIT - boundRepel));
+  if (z >  FLOOR_LIMIT - boundRepel) fz -= (z - (FLOOR_LIMIT - boundRepel));
+  if (z < -(FLOOR_LIMIT - boundRepel)) fz -= (z + (FLOOR_LIMIT - boundRepel));
+  return { fx, fz };
+}
+
+// Compute steering command (v, omega) toward a goal XZ position.
+// Blends goal direction with obstacle repulsion.
+// Returns { v, omega, arrived } where arrived = true when within 0.35 m.
+function steerToward(goalX, goalZ, speed) {
+  const dx   = goalX - drivePos.x;
+  const dz   = goalZ - drivePos.z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+
+  if (dist < 0.35) return { v: 0, omega: 0, arrived: true };
+
+  // Blend goal unit vector with repulsion
+  const { fx, fz } = computeRepulsion(drivePos.x, drivePos.z);
+  const blend = 0.3;
+  const desiredX   = dx / dist + fx * blend;
+  const desiredZ   = dz / dist + fz * blend;
+  const desiredYaw = Math.atan2(desiredX, desiredZ);
+
+  // Shortest-path angular error
+  let yawErr = desiredYaw - driveYaw;
+  while (yawErr >  Math.PI) yawErr -= 2 * Math.PI;
+  while (yawErr < -Math.PI) yawErr += 2 * Math.PI;
+
+  // Reduce speed when turning sharply so robot carves a smooth arc
+  const v     = speed * Math.max(0, Math.cos(yawErr * 0.8));
+  const omega = yawErr * 2.5;
+
+  return { v, omega, arrived: false };
+}
+
+// Pick the best wander target POI. Returns an {x, z} approach point.
+function pickWanderTarget() {
+  const pois = window.pois || [];
+  let best = null, bestScore = -1;
+  for (const poi of pois) {
+    const s = scorePOI(poi);
+    if (s > bestScore) { bestScore = s; best = poi; }
+  }
+  if (!best) {
+    // Fallback: random point anywhere on the floor
+    return {
+      x: (Math.random() * 2 - 1) * (FLOOR_LIMIT - 2),
+      z: (Math.random() * 2 - 1) * (FLOOR_LIMIT - 2),
+    };
+  }
+  // Approach to within 1.5 m of the POI (don't walk into it)
+  const dx = drivePos.x - best.mesh.position.x;
+  const dz = drivePos.z - best.mesh.position.z;
+  const d  = Math.sqrt(dx * dx + dz * dz) + 0.001;
+  return {
+    x: best.mesh.position.x + (dx / d) * 1.5,
+    z: best.mesh.position.z + (dz / d) * 1.5,
+  };
+}
+
+// Return the charger dock world XZ position
+function getChargerPos() {
+  const pois = window.pois || [];
+  const c = pois.find(p => p.category === 'charger');
+  return c ? { x: c.mesh.position.x, z: c.mesh.position.z } : { x: 0, z: -4 };
+}
+
+// True when robot is within docking distance of the charger
+function atCharger() {
+  const { x, z } = getChargerPos();
+  const dx = drivePos.x - x;
+  const dz = drivePos.z - z;
+  return Math.sqrt(dx * dx + dz * dz) < 0.4;
+}
+
+// Battery drain rate (fraction per second) based on current activity
+function batteryDrainRate() {
+  const moving = Math.abs(driveV) > 0.05;
+  const active = window.state?.gazeTargetActive;
+  let rate = 0.005 / 60; // base idle drain
+  if (moving) rate += 0.02 / 60;  // mobility adds extra drain
+  if (active) rate += 0.01 / 60;  // active gaze tracking adds minor drain
+  return rate;
+}
+
 // ── Gaze from ball position ──
 function computeGazeFromBall() {
   headGroup.getWorldPosition(_headWorld);
@@ -4750,51 +5307,70 @@ function computeGazeFromBall() {
 function trackWorldPoint(targetPos, dt, s, p) {
   const HEAD_SHARE   = 0.75;
   const EYE_NORM_DEG = 15;
-  const headStiff    = p.head3DSpeed * 4000;
-  const headDamp     = p.principlesEnabled ? p.headSpringDamp : 2 * Math.sqrt(headStiff);
-  const bodyStiff    = p.body3DSpeed * 3000;
-  const bodyDamp     = p.principlesEnabled ? p.bodySpringDamp : 2 * Math.sqrt(bodyStiff);
   const maxHead      = p.headRotationMax;
+
+  // Sync body3DYaw from the physical drive heading so the head spring
+  // correctly measures gaze angle relative to where the robot is actually facing.
+  s.body3DYaw = driveYaw * 180 / Math.PI;
+
+  // Body spring constants (still used for body deadband tracking below)
+  const bodyOmega = 2 * Math.PI * p.bodyHz;
+  const bodyStiff = bodyOmega * bodyOmega;
+  const bodyDamp  = 2 * p.bodyZeta * bodyOmega;
+  const bmv = p.bodyMaxVel;
+
+  // ── Geometry: compute desired head yaw and pitch targets ──────────────────
 
   // Yaw: head springs toward 75% of target, eyes cover the remaining 25%
   const targetYawDeg  = Math.atan2(targetPos.x, targetPos.z) * 180 / Math.PI;
   const relYawDeg     = targetYawDeg - s.body3DYaw;
   const headYawTarget = Math.max(-maxHead, Math.min(maxHead, relYawDeg * HEAD_SHARE));
-  const headYawAcc    = headStiff * (headYawTarget - s.head3DYaw) - headDamp * s.head3DYawVel;
-  s.head3DYawVel     += headYawAcc * dt;
-  s.head3DYaw        += s.head3DYawVel * dt;
-  const remainingYaw  = relYawDeg - s.head3DYaw;
-  const gazeXTarget   = Math.max(-1, Math.min(1, remainingYaw / EYE_NORM_DEG));
 
-  // Pitch: head spring, eyes cover remainder
+  // Pitch: compute from head world position → target vector
   headGroup.getWorldPosition(_headWorld);
   _ballDir.subVectors(targetPos, _headWorld);
-  const dist2D          = Math.sqrt(_ballDir.x * _ballDir.x + _ballDir.z * _ballDir.z);
-  const totalPitchDeg   = -Math.atan2(_ballDir.y, dist2D) * 180 / Math.PI;
+  const dist2D        = Math.sqrt(_ballDir.x * _ballDir.x + _ballDir.z * _ballDir.z);
+  const totalPitchDeg = -Math.atan2(_ballDir.y, dist2D) * 180 / Math.PI;
   const headPitchTarget = totalPitchDeg * HEAD_SHARE;
-  const headPitchAcc    = headStiff * (headPitchTarget - s.head3DPitch) - headDamp * s.head3DPitchVel;
-  s.head3DPitchVel     += headPitchAcc * dt;
-  s.head3DPitch        += s.head3DPitchVel * dt;
-  const remainingPitch  = totalPitchDeg - s.head3DPitch;
-  const gazeYTarget     = Math.max(-1, Math.min(1, remainingPitch / EYE_NORM_DEG));
 
-  // Body spring: kicks in when head yaw exceeds 60% of range
+  // ── Head motion — delegate to the motion profile system in main script ────
+  if (typeof window.advanceHeadMotion === 'function') {
+    window.advanceHeadMotion(s, dt, headYawTarget, headPitchTarget, p);
+  } else {
+    // Fallback simple lerp while module loads (or if advanceHeadMotion not ready)
+    s.head3DYaw   += (headYawTarget   - s.head3DYaw)   * Math.min(1, dt * 5);
+    s.head3DPitch += (headPitchTarget - s.head3DPitch)  * Math.min(1, dt * 5);
+  }
+
+  // Residual eye gaze covers the 25% not handled by the head
+  const remainingYaw   = relYawDeg   - s.head3DYaw;
+  const remainingPitch = totalPitchDeg - s.head3DPitch;
+  const gazeXTarget = Math.max(-1, Math.min(1, remainingYaw   / EYE_NORM_DEG));
+  const gazeYTarget = Math.max(-1, Math.min(1, remainingPitch / EYE_NORM_DEG));
+
+  // ── Body spring: fine-tune body yaw when head yaw pushes past 60% of range ─
+  // (driveYaw is the dominant heading; this adds subtle body lean toward target)
   const deadband = maxHead * 0.6;
   if (Math.abs(s.head3DYaw) > deadband) {
-    const excess   = s.head3DYaw - Math.sign(s.head3DYaw) * deadband;
-    const bodyAcc  = bodyStiff * excess - bodyDamp * s.body3DYawVel;
-    s.body3DYawVel += bodyAcc * dt;
+    const excess  = s.head3DYaw - Math.sign(s.head3DYaw) * deadband;
+    const bodyAcc = bodyStiff * excess - bodyDamp * s.body3DYawVel;
+    s.body3DYawVel = Math.max(-bmv, Math.min(bmv, s.body3DYawVel + bodyAcc * dt));
   } else {
     s.body3DYawVel *= Math.max(0, 1 - bodyDamp * 3 * dt);
   }
-  s.body3DYaw += s.body3DYawVel * dt;
+  // Note: body3DYaw is re-synced each frame from driveYaw, so body3DYawVel
+  // only matters for arc motion calculations below.
 
-  // Arc motion (Principle 7)
-  s.head3DRoll   = Math.max(-20, Math.min(20, -s.head3DYawVel * p.headArcFactor));
-  s.bodyPitchArc = Math.max(-10, Math.min(10, -s.body3DYawVel * p.bodyArcFactor));
+  // Arc motion (Principle 7) — ease in/out with angular velocity
+  const arcLerp = (cur, tgt, spd) => cur + (tgt - cur) * Math.min(1, spd * dt);
+  s.head3DRoll   = Math.max(-20, Math.min(20,
+    arcLerp(s.head3DRoll   || 0, -s.head3DYawVel * p.headArcFactor, 10)));
+  s.bodyPitchArc = Math.max(-10, Math.min(10,
+    arcLerp(s.bodyPitchArc || 0, -s.body3DYawVel * p.bodyArcFactor,  8)));
 
   // Drive pupils toward the residual 25%
-  const eyeT = Math.min(1, dt * p.head3DSpeed * 80);
+  // Eye tracks ~2× faster than head so it covers the residual 25% quickly
+  const eyeT = Math.min(1, dt * p.headHz * 1.6);
   s.gazeX   += (gazeXTarget - s.gazeX) * eyeT;
   s.gazeY   += (gazeYTarget - s.gazeY) * eyeT;
   s.arc.active    = false;
@@ -4814,23 +5390,126 @@ function preUpdate(dt) {
 
   const ballTracking = timeSinceDrag < p.ballTrackTimeout;
 
+  // Gaze priority: ball drag > active POI > idle saccade
+  // No early returns here — drive integration always runs at the end.
   if (ballTracking) {
     // Manual ball override — highest priority
     s.gazeTargetActive = true;
     trackWorldPoint(ball.position, dt, s, p);
-    return;
+  } else {
+    // Autonomous POI attention — drive system selected a target
+    const pois = window.pois;
+    if (pois && s.poiIdx >= 0 && s.poiIdx < pois.length) {
+      s.gazeTargetActive = true;
+      trackWorldPoint(pois[s.poiIdx].mesh.position, dt, s, p);
+    } else {
+      // No active target — hand control back to idle saccade / micro-wander
+      s.gazeTargetActive = false;
+    }
   }
 
-  // Autonomous POI attention — drive system selected a target
-  const pois = window.pois;
-  if (pois && s.poiIdx >= 0 && s.poiIdx < pois.length) {
-    s.gazeTargetActive = true;
-    trackWorldPoint(pois[s.poiIdx].mesh.position, dt, s, p);
-    return;
+  // ── Drive integration — always runs, independent of gaze state ───────────
+  // Runs every frame regardless of gaze state.
+  gameTime += dt;
+  smemVisit(drivePos.x, drivePos.z); // stamp current cell as visited
+
+  // Battery management
+  if (batteryForceLow) { battery = 0.08; batteryForceLow = false; }
+  if (atCharger()) {
+    // Charge at 0.03%/s (fraction of 1.0 per second)
+    battery = Math.min(1, battery + (0.03 / 60) * dt);
+  } else {
+    battery = Math.max(0, battery - batteryDrainRate() * dt);
+  }
+  window.batteryLevel = battery; // expose for UI widgets
+
+  // Determine mobility commands for this frame
+  let cmdV = 0, cmdOmega = 0;
+  if (mobilityEnabled) {
+    const speed        = getMobilitySpeed();
+    const isBatLow     = battery < 0.30;
+    const isBatCritical = battery < 0.10;
+
+    // Critical battery: interrupt immediately and return to charger
+    if (isBatCritical && !atCharger()) {
+      mobilityState = 'returning';
+    } else if (isBatLow && mobilityState !== 'returning' && mobilityState !== 'charging' && !mobilityLegDone) {
+      // Let current wander leg finish, then return
+    } else if (isBatLow && (mobilityLegDone || mobilityState === 'hold')) {
+      mobilityState = 'returning';
+    }
+
+    // Arrived at charger — switch to charging state
+    if (atCharger()) {
+      mobilityState = 'charging';
+      mobilityGoal  = null;
+    }
+
+    mobilityTimer += dt;
+
+    if (mobilityState === 'returning' || mobilityState === 'charging') {
+      // Navigate back to the charger dock
+      if (!atCharger()) {
+        const cPos = getChargerPos();
+        const { v, omega, arrived } = steerToward(cPos.x, cPos.z, 0.5);
+        cmdV = v; cmdOmega = omega;
+        if (arrived) mobilityState = 'charging';
+      }
+    } else if (speed > 0) {
+      // Autonomous wander — pick a new goal when needed
+      if (!mobilityGoal || mobilityTimer > 15 || mobilityLegDone) {
+        mobilityGoal    = pickWanderTarget();
+        mobilityTimer   = 0;
+        mobilityLegDone = false;
+        mobilityState   = 'wander';
+      }
+      const { v, omega, arrived } = steerToward(mobilityGoal.x, mobilityGoal.z, speed);
+      cmdV = v; cmdOmega = omega;
+      if (arrived) mobilityLegDone = true;
+    } else {
+      // Behavior calls for zero speed — hold position, gently face active POI
+      mobilityState = 'hold';
+      mobilityGoal  = null;
+      cmdV = 0;
+      // Slow spin to orient toward the currently active POI
+      if (s && s.poiIdx != null && window.pois) {
+        const poi = window.pois[s.poiIdx];
+        if (poi) {
+          const dx = poi.mesh.position.x - drivePos.x;
+          const dz = poi.mesh.position.z - drivePos.z;
+          const desiredYaw = Math.atan2(dx, dz);
+          let yawErr = desiredYaw - driveYaw;
+          while (yawErr >  Math.PI) yawErr -= 2 * Math.PI;
+          while (yawErr < -Math.PI) yawErr += 2 * Math.PI;
+          cmdOmega = Math.max(-0.5, Math.min(0.5, yawErr * 1.5));
+        }
+      }
+    }
   }
 
-  // No active target — hand control back to idle saccade / micro-wander
-  s.gazeTargetActive = false;
+  // Acceleration-limited velocity integration (avoids instantaneous jerks)
+  const maxAccel      = 0.8;   // m/s²
+  const maxAlphaAccel = 2.0;   // rad/s²
+  driveV     += Math.max(-maxAccel      * dt, Math.min(maxAccel      * dt, cmdV     - driveV));
+  driveOmega += Math.max(-maxAlphaAccel * dt, Math.min(maxAlphaAccel * dt, cmdOmega - driveOmega));
+
+  // Integrate robot pose
+  driveYaw   += driveOmega * dt;
+  drivePos.x += driveV * Math.sin(driveYaw) * dt;
+  drivePos.z += driveV * Math.cos(driveYaw) * dt;
+
+  // Clamp to floor bounds
+  drivePos.x = Math.max(-FLOOR_LIMIT, Math.min(FLOOR_LIMIT, drivePos.x));
+  drivePos.z = Math.max(-FLOOR_LIMIT, Math.min(FLOOR_LIMIT, drivePos.z));
+
+  // Differential wheel angular velocities → cumulative wheel rotation angles
+  const vL = driveV - driveOmega * TRACK_WIDTH / 2;
+  const vR = driveV + driveOmega * TRACK_WIDTH / 2;
+  leftWheelAngle  += (vL / WR) * dt;
+  rightWheelAngle += (vR / WR) * dt;
+
+  // Expose drive state for HUD / debug widgets
+  window.driveState = { mobilityState, battery, driveV, driveOmega, drivePos, driveYaw };
 }
 
 // ── render — called after draw() each frame ──
@@ -4840,14 +5519,38 @@ function render() {
   const s = window.state;
   const p = window.params;
   if (s && p) {
-    headGroup.rotation.y =  s.head3DYaw           * Math.PI / 180;
-    headGroup.rotation.x =  s.head3DPitch         * Math.PI / 180;
-    headGroup.rotation.z = (s.head3DRoll   || 0)  * Math.PI / 180;
-    robot.rotation.y     =  s.body3DYaw           * Math.PI / 180;
-    robot.rotation.x     = (s.bodyPitchArc || 0)  * Math.PI / 180;
+    headGroup.rotation.y  =  s.head3DYaw           * Math.PI / 180;
+    headGroup.rotation.x  =  s.head3DPitch         * Math.PI / 180;
+    headGroup.rotation.z  = (s.head3DRoll   || 0)  * Math.PI / 180;
+    // Drive system owns robot.position and robot.rotation.y — don't use body3DYaw here
+    robot.position.set(drivePos.x, 0, drivePos.z);
+    robot.rotation.y = driveYaw;
+    // Lean only the upper body — wheels stay flat in the robot group
+    upperBody.rotation.x  = (s.bodyPitchArc || 0)  * Math.PI / 180;
     applyColors();
     renderer.setClearColor(new THREE.Color(window.colors?.stageBg ?? '#0a0a0f'));
     ball.visible = !!(p.showBall);
+
+    // Wheel animation — spin each wheel around its local X axis proportional
+    // to how far it has rolled (wheel.rotation.z = PI/2 sets the axle direction;
+    // rotation.x drives the rolling spin around that axle)
+    if (leftWheel)  leftWheel.rotation.x  = leftWheelAngle;
+    if (rightWheel) rightWheel.rotation.x = rightWheelAngle;
+
+    // Travel camera — user-orbitable; target follows robot as it moves.
+    // Translate both the orbit target and camera position by robot's delta
+    // so the user's chosen angle/distance is preserved across movement.
+    const _tdx = drivePos.x - _travelLastRobotPos.x;
+    const _tdz = drivePos.z - _travelLastRobotPos.z;
+    if (_tdx !== 0 || _tdz !== 0) {
+      travelControls.target.x += _tdx;
+      travelControls.target.z += _tdz;
+      travelCamera.position.x += _tdx;
+      travelCamera.position.z += _tdz;
+    }
+    _travelLastRobotPos.set(drivePos.x, 0, drivePos.z);
+    travelCamera.aspect = camera.aspect;
+    travelCamera.updateProjectionMatrix();
 
     // Force world matrix update so POV camera reads this frame's orientation
     headGroup.updateWorldMatrix(true, false);
@@ -4899,6 +5602,10 @@ function render() {
         _labelPos.project(ceilingCamera);
         sx = (_labelPos.x * 0.5 + 0.5) * cw;
         sy = (-_labelPos.y * 0.5 + 0.5) * ch;
+      } else if (activeView === 'travel') {
+        _labelPos.project(travelCamera);
+        sx = (_labelPos.x * 0.5 + 0.5) * cw;
+        sy = (-_labelPos.y * 0.5 + 0.5) * ch;
       } else {
         _labelPos.project(camera);
         sx = (_labelPos.x * 0.5 + 0.5) * cw;
@@ -4937,6 +5644,9 @@ function render() {
   } else if (activeView === 'ceiling') {
     ceilingControls.update();
     renderer.render(scene, ceilingCamera);
+  } else if (activeView === 'travel') {
+    travelControls.update();
+    renderer.render(scene, travelCamera);
   } else {
     controls.update();
     renderer.render(scene, camera);
@@ -5016,6 +5726,7 @@ function setFourUpMode(on) {
     // Restore appropriate single-view controls
     controls.enabled        = (activeView === 'perspective');
     ceilingControls.enabled = (activeView === 'ceiling');
+    travelControls.enabled  = (activeView === 'travel');
   }
   resize();
 }
@@ -5024,6 +5735,7 @@ function setActiveView(view) {
   activeView = view;
   controls.enabled        = (view === 'perspective');
   ceilingControls.enabled = (view === 'ceiling');
+  travelControls.enabled  = (view === 'travel');
 }
 
 function applyColors() {
@@ -5034,7 +5746,57 @@ function applyColors() {
   wheelMat.color.set(c.wheelColor);
 }
 
-window.three = { preUpdate, render, resize, applyColors, setFourUpMode, setActiveView };
+function getCameras() {
+  return {
+    perspective: {
+      pos:    { x: camera.position.x,        y: camera.position.y,        z: camera.position.z },
+      target: { x: controls.target.x,        y: controls.target.y,        z: controls.target.z },
+    },
+    ceiling: {
+      pos:    { x: ceilingCamera.position.x,  y: ceilingCamera.position.y,  z: ceilingCamera.position.z },
+      target: { x: ceilingControls.target.x,  y: ceilingControls.target.y,  z: ceilingControls.target.z },
+    },
+  };
+}
+
+function restoreCameras(data) {
+  if (!data) return;
+  if (data.perspective) {
+    const { pos, target } = data.perspective;
+    camera.position.set(pos.x, pos.y, pos.z);
+    controls.target.set(target.x, target.y, target.z);
+    controls.update();
+  }
+  if (data.ceiling) {
+    const { pos, target } = data.ceiling;
+    ceilingCamera.position.set(pos.x, pos.y, pos.z);
+    ceilingControls.target.set(target.x, target.y, target.z);
+    ceilingControls.update();
+  }
+}
+
+// Restore saved camera positions (module runs after main script so localStorage is already available)
+try {
+  const saved = JSON.parse(localStorage.getItem('gazer_config'));
+  if (saved?.cameras) restoreCameras(saved.cameras);
+} catch (_) {}
+
+// Restore saved drive state (position, heading, battery) from localStorage
+try {
+  const saved = JSON.parse(localStorage.getItem('gazer_config'));
+  if (saved?.drive) {
+    drivePos.set(saved.drive.x || 0, 0, saved.drive.z || 0);
+    driveYaw = saved.drive.yaw    || 0;
+    battery  = saved.drive.battery != null ? saved.drive.battery : 1.0;
+  }
+} catch (_) {}
+
+// Return current robot pose in world space (called from main script or external tools)
+function getRobotPose() {
+  return { x: drivePos.x, y: 0, z: drivePos.z, yaw: driveYaw };
+}
+
+window.three = { preUpdate, render, resize, applyColors, setFourUpMode, setActiveView, getCameras, restoreCameras, getRobotPose };
 </script>
 
 </body>
