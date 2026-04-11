@@ -13,8 +13,16 @@
 ### 3D world
 - [x] Three.js robot — self-balancing form, head/body spring physics
 - [x] Full-body attention — head yaw/pitch + body yaw + eye gaze, all spring-driven toward a 3D world point
-- [x] Manual ball override — drag to steer, auto-releases after timeout
+- [x] Manual ball override — drag to steer (XZ plane), Y-drag handle on ball; auto-releases after timeout
 - [x] Camera — orbit controls, zoom extended to 60 units
+
+### Multi-camera views
+- [x] **Face cam** — 2D eye canvas overlaid in top-left quadrant of 4-up grid
+- [x] **POV cam** — mounted at robot eye, looks in gaze direction (head quaternion + gazeX/Y); POI labels project through this camera in both single and 4-up mode
+- [x] **Ceiling cam** — top-down perspective, pan + zoom only (no rotation), up=-Z for gimbal stability; centred over POI cluster
+- [x] **Perspective cam** — existing orbit-controlled camera
+- [x] **View switcher** — Face / POV / Ceiling / Persp / 4-up buttons; active button highlights; expand buttons on each 4-up quadrant
+- [x] **Viewport fix** — logical-pixel viewport coordinates (fixes 2× retina displays)
 
 ### Drive system
 - [x] Pressure / scoring — per-behavior float, novelty decay, hysteresis threshold
@@ -33,61 +41,55 @@
 - [x] Draggable POIs — hit-test before ball, positions persist via localStorage
 - [x] Personal time — per-POI `familiarity` (decaying, drives novelty selection) + `attention` (cumulative, visualized)
 - [x] Attention visualization — marker scale + fill bar by cumulative dwell time
-
-### Config & persistence
-- [x] localStorage — params, colors, POI positions survive refresh
-- [x] Version stamping — title tag + header span for deployment verification
-
----
-
-## Up next
-
-### Multi-camera views
-Four named cameras rendered as a switchable single view or a 2×2 grid.
-
-- [x] **Face cam** — 2D eye canvas overlaid in top-left quadrant; always visible in 4-up mode
-- [x] **POV cam** — camera mounted at robot's eye position, looks in gaze direction (head quaternion + gazeX/Y)
-- [x] **Ceiling cam** — top-down perspective view; pan + zoom only (no rotation), up=-Z for gimbal stability
-- [x] **Perspective cam** — existing orbit-controlled camera, preserved as the fourth view
-- [x] **Layout toggle** — 4-up checkbox in left panel; expand (○) buttons on each quadrant to break out to single view; quadrants labeled
-
-### Input pipeline
-Connect the rule engine to real sensors. The rule engine is ready — it just needs events.
-
-- [x] `send.py` upgrades — native `attn`, `affect`, `micro`, `event`, `pressure` commands; event data payloads (`x=`, `y=`, `z=`, `scale=`); `look3D` command
-- [ ] Face detection process — camera → 3D position → `face_detected {x,y,z}` → person POI tracks a real face
-- [ ] Audio process — microphone amplitude → `loud_sound` / `startle`; voice activity → `speech_start` / `speech_end`
-- [ ] Time-of-day — scheduler that shifts drive profile weights on a day curve (morning alert, evening sleepy)
-
-### State broadcast
-The robot currently only receives commands. It needs to push state out.
-
-- [ ] WebSocket out channel — engine serializes full state each tick, broadcasts to all subscribers
-- [ ] Recorder — subscriber that appends state packets to JSONL for session replay
-- [ ] Browser as pure renderer — receives state packets instead of computing them (prerequisite for deployment)
-
-### Engine extraction
-Split `index.html` into deployable modules.
-
-- [ ] `engine.js` — compositor, drive, behaviors, saccade planner, state machine; no DOM dependency
-- [ ] `renderer.canvas.js` — 2D eye drawing
-- [ ] `renderer.three.js` — Three.js body scene
-- [ ] `main.browser.js` — browser entry: engine + renderers + state receiver
-- [ ] `main.robot.js` — robot entry: engine + hardware renderers + broadcaster
-
-### Hardware output
-- [ ] `renderer.oled.js` — 1-bit pixel buffer for SSD1306/SH1106 via i2c
-- [ ] `renderer.servo.js` — maps gaze/lid/head values to servo positions via pigpio
+- [x] POI info widget — left panel shows active POI name, category, familiarity bar, attention time, affordance tags
 
 ### Expression depth
 - [x] Speaking face — amplitude-driven mouth; `params.amplitude` (0–1) opens mouth from closed curve to filled shape; `mouthOpenMax` controls height; smoothed at ~80ms for speech sync
 - [x] Listening face — tighter gaze, slower blink, more open lids, raised brows; reduced saccade range while attending
 - [x] POI-triggered expressions — `microAuto` picks pleased/curious by familiarity; per-event micros for dog, cat, kid, arrival, departure, face lost
 
+### Config & persistence
+- [x] localStorage — params, colors, POI positions survive refresh
+- [x] Version stamping — title tag + header span for deployment verification
+
+### Dev tooling
+- [x] `send.py` — full event type list, data payloads (`x=`, `y=`, `z=`, `scale=`), `look3D` command
+- [x] `states.py` — scenario runner + interactive REPL with `speak`, `event`, `task`, `complete` commands
+
+---
+
+## Up next
+
+### Input pipeline
+Connect the rule engine to real sensors. The rule engine is ready — it just needs events fired at it.
+
+- [ ] **Face detection** — Python process: camera → MediaPipe → 3D position estimate → fires `face_detected {x,y,z}`; person POI tracks a real face
+- [ ] **Audio process** — microphone amplitude → `loud_sound` / `startle`; voice activity detection → `speech_start` / `speech_end`
+- [ ] **Time-of-day scheduler** — shifts drive profile weights on a day curve (morning alert, afternoon steady, evening sleepy)
+
+### State broadcast
+The robot only receives commands today. It needs to push state out for deployment and recording.
+
+- [ ] **WebSocket out channel** — engine serializes full state each tick, broadcasts to all subscribers
+- [ ] **Recorder** — subscriber that appends state packets to JSONL for session replay
+- [ ] **Browser as pure renderer** — receives state packets instead of computing them locally (prerequisite for Pi deployment)
+
+### Engine extraction
+Split `index.html` into deployable modules. Prerequisite for hardware targets.
+
+- [ ] `engine.js` — compositor, drive, behaviors, saccade planner, state machine; no DOM dependency
+- [ ] `renderer.canvas.js` — 2D eye drawing
+- [ ] `renderer.three.js` — Three.js body scene
+- [ ] `main.browser.js` — browser entry: engine + renderers + WebSocket state receiver
+- [ ] `main.robot.js` — robot entry: engine + hardware renderers + state broadcaster
+
+### Hardware output
+- [ ] `renderer.oled.js` — 1-bit pixel buffer for SSD1306/SH1106 via i2c
+- [ ] `renderer.servo.js` — maps gaze/lid/head values to servo positions via pigpio
+
 ### Testing
-- [ ] Update `send.py` with all event types
 - [ ] Unit tests — compositor, drive, transition enforcer (Node.js, no browser)
-- [ ] Browser tests — Playwright, compositor blending, micro-expression return, principles toggle
+- [ ] Browser tests — Playwright: compositor blending, micro-expression return, principles toggle
 - [ ] CI — GitHub Actions on push
 
 ---
