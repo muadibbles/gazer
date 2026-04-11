@@ -8,18 +8,19 @@ Usage:
     python3 send.py <command> [args…]
 
 Commands:
-    behavior <name>               Set both compositor layers simultaneously
-    attn <name>                   Set gaze layer only
-    affect <name>                 Set expression layer only
-    micro <name> [hold_secs]      Trigger a micro-expression (default hold: 0.25s)
-    event <name>                  Emit a drive event (face_detected, startle, etc.)
-    pressure <state> <amount>     Inject pressure directly into a state (0–1)
-    param <key> <value>           Set a single param
-    params <key=val> [key=val…]   Set multiple params at once
-    look <x> <y>                  Trigger a saccade  (x,y in -1..1)
-    blink                         Trigger a blink
-    color <key> <hex>             Set a color value
-    raw <json>                    Send arbitrary JSON
+    behavior <name>                    Set both compositor layers simultaneously
+    attn <name>                        Set gaze layer only
+    affect <name>                      Set expression layer only
+    micro <name> [hold_secs]           Trigger a micro-expression (default hold: 0.25s)
+    event <name> [key=val …]           Emit a drive event with optional data payload
+    pressure <state> <amount>          Inject pressure directly into a state (0–1)
+    param <key> <value>                Set a single param
+    params <key=val> [key=val…]        Set multiple params at once
+    look <x> <y>                       Trigger a 2D saccade (x,y in -1..1)
+    look3D <x> <y> <z> [cat=<name>]   Reposition nearest POI and snap attention
+    blink                              Trigger a blink
+    color <key> <hex>                  Set a color value
+    raw <json>                         Send arbitrary JSON
 
 Behavior names:
     idle  attentive  curious  sleepy  alert  searching
@@ -27,8 +28,26 @@ Behavior names:
     engaged  confused  pleased  uncomfortable
     waking  resting  interrupted
 
-Drive events:
-    face_detected  face_lost  speech_start  speech_end  startle  error  success
+Drive events (rule engine):
+    face_detected    x= y= z= scale=    Face found at world position
+    face_lost                            Face no longer visible
+    person_entered   x= y= z=           Person entered scene
+    person_left                          Person left scene
+    person_close     scale=             Person uncomfortably close (scale = proximity 0–1)
+    crowd_detected                       Multiple people present
+    room_empty                           Nobody visible
+    room_still                           No motion for extended period
+    motion_detected  x= y= z=           Motion at world position
+    startle          scale=             Sudden loud or unexpected stimulus (scale = intensity)
+    loud_sound       scale=             Loud audio event
+    speech_start                         Voice activity detected
+    speech_end                           Voice activity ended
+    long_silence                         Extended silence after speech
+    wake_word        x= y= z=           Wake word detected (optional speaker position)
+    error                                System error occurred
+    success                              Task completed successfully
+    low_power                            Battery / power warning
+    startup                              Robot coming online
 
 Examples:
     python3 send.py behavior attentive
@@ -36,10 +55,16 @@ Examples:
     python3 send.py affect pleased
     python3 send.py micro confused 0.3
     python3 send.py event startle
+    python3 send.py event startle scale=1.5
+    python3 send.py event face_detected x=-1.2 y=1.5 z=3.0
+    python3 send.py event face_detected x=-1.2 y=1.5 z=3.0 scale=0.8
+    python3 send.py event motion_detected x=2.0 y=0.8 z=3.5
     python3 send.py pressure curious 0.6
     python3 send.py param gazeSpeed 2.0
     python3 send.py params gazeSpeed=1.5 pupilSize=0.6
     python3 send.py look 0.5 -0.2
+    python3 send.py look3D -1.2 1.5 3.0
+    python3 send.py look3D -1.2 1.5 3.0 cat=person
     python3 send.py blink
     python3 send.py color eyeColor '#ff0000'
     python3 send.py raw '{"type":"params","data":{"arcCurvature":0.8}}'
@@ -61,6 +86,18 @@ except ImportError:
     sys.exit(1)
 
 URL = os.environ.get("WS_URL", "ws://localhost:8765")
+
+
+def parse_kv(pairs: list) -> dict:
+    """Parse key=value strings into a dict, coercing numeric values to float."""
+    data = {}
+    for pair in pairs:
+        k, _, v = pair.partition("=")
+        try:
+            data[k] = float(v)
+        except ValueError:
+            data[k] = v
+    return data
 
 
 def build_message(args: list) -> dict:
@@ -99,9 +136,12 @@ def build_message(args: list) -> dict:
 
     elif cmd == "event":
         if len(args) < 2:
-            print("usage: event <name>")
+            print("usage: event <name> [key=val …]")
             sys.exit(1)
-        return {"type": "event", "value": args[1]}
+        msg: dict = {"type": "event", "value": args[1]}
+        if len(args) > 2:
+            msg["data"] = parse_kv(args[2:])
+        return msg
 
     elif cmd == "pressure":
         if len(args) < 3:
@@ -130,6 +170,17 @@ def build_message(args: list) -> dict:
             print("usage: look <x> <y>   (values in -1..1)")
             sys.exit(1)
         return {"type": "look", "x": float(args[1]), "y": float(args[2])}
+
+    elif cmd == "look3D":
+        if len(args) < 4:
+            print("usage: look3D <x> <y> <z> [cat=<category>]")
+            sys.exit(1)
+        msg = {"type": "look3D", "x": float(args[1]), "y": float(args[2]), "z": float(args[3])}
+        for extra in args[4:]:
+            k, _, v = extra.partition("=")
+            if k == "cat" or k == "category":
+                msg["category"] = v
+        return msg
 
     elif cmd == "blink":
         return {"type": "blink"}

@@ -3745,6 +3745,10 @@ function wsHandleMessage(msg) {
       break;
     }
 
+    case 'look3D':
+      look3D(msg.x ?? null, msg.y ?? null, msg.z ?? null, msg.category ?? null);
+      break;
+
     case 'blink':
       if (state.blink.state === 'open') {
         state.blink.state = 'squinting';
