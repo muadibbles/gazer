@@ -31,7 +31,6 @@
 - [x] Rule engine — declarative `ruleTable`, 19+ named events, typed actions (`pressure`, `look3D`, `setAttn`, `microExpress`, `microAuto`, `assignTask`, `completeTask`)
 - [x] Task system — queued directed interactions; utility (transactional) + social (open-ended) modes; interrupt support; POI affordances schema
 - [x] POI-sourced events — `dog_begging`, `dog_play_request`, `cat_greeting`, `kid_play_request`, `arrival`, `departure`
-- [x] `states.py` — interactive scenario tester; 11 named scenarios covering pets, tasks, social, multi-task queue, interrupt
 
 ### World model
 - [x] POIs — 8 named 3D markers (Person, Child, Cat, Dog, TV, Window, Food Bowl, Front Door)
@@ -52,25 +51,29 @@
 - [x] localStorage — params, colors, POI positions survive refresh
 - [x] Version stamping — title tag + header span for deployment verification
 
+### Input pipeline
+- [x] `face_detect.py` — webcam → MediaPipe Face Detection → 3D world position → `face_detected` + `look3D` at 5 Hz + `face_lost` (debounced); `--hfov`, `--camera`, `--no-display`
+- [x] `audio.py` — mic → RMS → VAD state machine (`speech_start` / `speech_end`); `startle` on sudden spike; `loud_sound` on threshold; continuous `amplitude` param at 20 Hz; `--device`, `--threshold`, `--list-devices`
+- [x] `time_scheduler.py` — day curve: morning (curious↑ alert↑), day (neutral), evening (idle↑), night (sleepy↑ resting↑); fires pressure commands every 2 min; `--interval`, `--dry-run`
+
+### State broadcast
+- [x] `wsBroadcastState()` — 20 Hz WebSocket out; `type: "state"` packet with full attn/affect/behavior/gaze/drive/task/pois
+- [x] `recorder.py` — connects to relay, filters `type: "state"`, appends JSONL; auto-reconnects with backoff
+- [x] Renderer Mode — toggle in WebSocket panel; engine pauses, incoming state packets hydrate; motion cascade + 3D springs smooth 20 Hz → 60 fps
+
 ### Dev tooling
-- [x] `send.py` — full event type list, data payloads (`x=`, `y=`, `z=`, `scale=`), `look3D` command
-- [x] `states.py` — scenario runner + interactive REPL with `speak`, `event`, `task`, `complete` commands
-- [x] `simulate.py` — synthetic sensor simulator; virtual person wanders, speaks, triggers sounds; `--fast`, `--once`, `--seed`, `--speed`
+- [x] `server.py` — WebSocket relay; all clients in one broadcast group; state packets throttled to 1/s in console
+- [x] `send.py` — one-shot command sender; full event type list, `look3D`, data payloads
+- [x] `states.py` — scenario runner + interactive REPL; 11 named scenarios; `speak`, `event`, `task`, `complete` commands
+- [x] `simulate.py` — synthetic sensor simulator; virtual person lifecycle, speech bursts, ambient sounds; `--fast`, `--once`, `--seed`, `--speed`
 - [x] `replay.py` — plays back a JSONL session at original cadence; `--speed`, `--loop`
 
 ---
 
 ## Up next
 
-### Input pipeline
-- [x] **Face detection** — `face_detect.py`; webcam → MediaPipe Face Detection → 3D world position estimate → `face_detected` + `look3D` track at 5 Hz + `face_lost` (debounced); `--hfov`, `--camera`, `--no-display`
-- [x] **Audio process** — `audio.py`; mic → RMS → `speech_start` / `speech_end` VAD state machine; `startle` on sudden spike; `loud_sound` on threshold; continuous `amplitude` param at 20 Hz for mouth sync; `--device`, `--threshold`, `--list-devices`
-- [x] **Time-of-day scheduler** — `time_scheduler.py`; day curve: morning (curious↑ alert↑), day (neutral), evening (idle↑), night (sleepy↑ resting↑); fires pressure commands every 2 min; `--interval`, `--dry-run`
-
-### State broadcast
-- [x] **WebSocket out channel** — `wsBroadcastState()` at 20 Hz; `type: "state"` packet with full attn/affect/behavior/gaze/drive/task/pois
-- [x] **Recorder** — `recorder.py`; connects to relay, filters `type: "state"`, appends JSONL with auto-reconnect
-- [x] **Browser as pure renderer** — Renderer Mode toggle in WebSocket panel; engine pauses, incoming state packets hydrate; motion cascade + 3D springs smooth 20 Hz → 60 fps
+### Documentation
+- [ ] **README** — setup, dependencies, and usage for every script: `server.py`, `send.py`, `states.py`, `recorder.py`, `replay.py`, `simulate.py`, `face_detect.py`, `audio.py`, `time_scheduler.py`
 
 ### Engine extraction
 Split `index.html` into deployable modules. Prerequisite for hardware targets.
@@ -81,17 +84,14 @@ Split `index.html` into deployable modules. Prerequisite for hardware targets.
 - [ ] `main.browser.js` — browser entry: engine + renderers + WebSocket state receiver
 - [ ] `main.robot.js` — robot entry: engine + hardware renderers + state broadcaster
 
-### Hardware output
-- [ ] `renderer.oled.js` — 1-bit pixel buffer for SSD1306/SH1106 via i2c
-- [ ] `renderer.servo.js` — maps gaze/lid/head values to servo positions via pigpio
-
-### Documentation
-- [ ] **README** — setup, dependencies, and usage for every script: `server.py`, `send.py`, `states.py`, `recorder.py`, `replay.py`, `simulate.py`, `face_detect.py`, `audio.py`, `time_scheduler.py`
-
 ### Testing
 - [ ] Unit tests — compositor, drive, transition enforcer (Node.js, no browser)
 - [ ] Browser tests — Playwright: compositor blending, micro-expression return, principles toggle
 - [ ] CI — GitHub Actions on push
+
+### Hardware output
+- [ ] `renderer.oled.js` — 1-bit pixel buffer for SSD1306/SH1106 via i2c
+- [ ] `renderer.servo.js` — maps gaze/lid/head values to servo positions via pigpio
 
 ---
 
