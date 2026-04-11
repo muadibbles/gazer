@@ -517,6 +517,72 @@ textarea.json-area {
 /* keep canvas rendering (texture source) but hide it visually */
 .stage.mode-3d > #canvas { opacity: 0; pointer-events: none; }
 
+/* ── 4-up mode ─────────────────────────────────────────── */
+/* Face canvas sits in top-left quadrant */
+.stage.mode-4up > #canvas {
+  position: absolute;
+  left: 0; top: 0;
+  width: 50%; height: 50%;
+  opacity: 1 !important;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Quad overlay grid — labels + expand buttons */
+#quad-overlays {
+  display: none;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.stage.mode-4up #quad-overlays {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.quad-overlay {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 7px 9px;
+  border: 1px solid rgba(255,255,255,0.07);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.quad-label {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: rgba(255,255,255,0.25);
+  font-family: monospace;
+  text-transform: uppercase;
+  user-select: none;
+}
+.expand-btn {
+  position: absolute;
+  bottom: 7px; right: 7px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.22);
+  background: rgba(0,0,0,0.45);
+  color: rgba(255,255,255,0.45);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+  pointer-events: all;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.expand-btn:hover {
+  border-color: rgba(255,255,255,0.65);
+  background: rgba(0,0,0,0.65);
+  color: rgba(255,255,255,0.9);
+}
+
 /* POI overlay labels */
 .poi-label {
   position: absolute;
@@ -609,6 +675,8 @@ input[type="checkbox"].grid-cb:checked::after {
   <div class="view-toggle-row">
     <input type="checkbox" class="grid-cb" id="toggle-3d" onchange="toggle3D(this.checked)" checked />
     <label for="toggle-3d">3D View</label>
+    <input type="checkbox" class="grid-cb" id="toggle-4up" onchange="toggle4Up(this.checked)" style="margin-left:10px;"/>
+    <label for="toggle-4up">4-up</label>
   </div>
   <div class="view-toggle-row" style="margin-top:6px;color:var(--muted);font-size:11px;letter-spacing:.04em;">BALL AXIS LOCKS</div>
   <div class="view-toggle-row">
@@ -653,6 +721,24 @@ input[type="checkbox"].grid-cb:checked::after {
 <div class="stage">
   <canvas id="canvas" width="600" height="600"></canvas>
   <div id="three-stage"></div>
+  <div id="quad-overlays">
+    <div class="quad-overlay" data-view="face">
+      <span class="quad-label">Face</span>
+      <button class="expand-btn" onclick="expandView('face')" title="Expand">○</button>
+    </div>
+    <div class="quad-overlay" data-view="pov">
+      <span class="quad-label">POV</span>
+      <button class="expand-btn" onclick="expandView('pov')" title="Expand">○</button>
+    </div>
+    <div class="quad-overlay" data-view="ceiling">
+      <span class="quad-label">Ceiling</span>
+      <button class="expand-btn" onclick="expandView('ceiling')" title="Expand">○</button>
+    </div>
+    <div class="quad-overlay" data-view="perspective">
+      <span class="quad-label">Perspective</span>
+      <button class="expand-btn" onclick="expandView('perspective')" title="Expand">○</button>
+    </div>
+  </div>
 </div>
 
 <div class="panel">
@@ -3145,6 +3231,31 @@ function toggle3D(on) {
   if (on && window.three) window.three.resize();
 }
 
+function toggle4Up(on) {
+  const stage = document.querySelector('.stage');
+  stage.classList.toggle('mode-4up', on);
+  if (on) {
+    // 4-up always needs 3D
+    document.getElementById('toggle-3d').checked = true;
+    toggle3D(true);
+  }
+  window.three?.setFourUpMode(on);
+}
+
+function expandView(view) {
+  // Collapse 4-up first
+  document.getElementById('toggle-4up').checked = false;
+  toggle4Up(false);
+  if (view === 'face') {
+    document.getElementById('toggle-3d').checked = false;
+    toggle3D(false);
+  } else {
+    document.getElementById('toggle-3d').checked = true;
+    toggle3D(true);
+    window.three?.setActiveView(view);
+  }
+}
+
 function makeColorRow(key, label, onChange) {
   const row = document.createElement('div');
   row.className = 'color-row';
@@ -4059,6 +4170,58 @@ controls.maxDistance    = 60;
 controls.maxPolarAngle  = Math.PI * 0.88; // prevent going under the floor
 controls.update();
 
+// ── POV camera (robot eye view) ──────────────────────────────────────────
+const povCamera = new THREE.PerspectiveCamera(65, 1, 0.1, 100);
+
+// ── Ceiling camera (top-down survey, pan + zoom only) ────────────────────
+const ceilingCamera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
+ceilingCamera.up.set(0, 0, -1);    // "north" = toward -Z so top-down is stable
+ceilingCamera.position.set(0, 14, 0);
+ceilingCamera.lookAt(0, 0, 0);
+
+const ceilingControls = new OrbitControls(ceilingCamera, renderer.domElement);
+ceilingControls.target.set(0, 0, 0);
+ceilingControls.enableRotate  = false;
+ceilingControls.enableDamping = true;
+ceilingControls.dampingFactor = 0.08;
+ceilingControls.minDistance   = 3;
+ceilingControls.maxDistance   = 60;
+ceilingControls.enabled       = false;
+ceilingControls.update();
+
+// ── Multi-camera state ────────────────────────────────────────────────────
+let fourUpMode = false;
+let activeView = 'perspective'; // 'perspective' | 'pov' | 'ceiling'
+
+// Pooled vectors for POV camera update (avoid GC pressure)
+const _povHeadPos  = new THREE.Vector3();
+const _povHeadQuat = new THREE.Quaternion();
+const _povLookDir  = new THREE.Vector3();
+const _povTarget   = new THREE.Vector3();
+
+// ── Quad-aware pointer routing ────────────────────────────────────────────
+// In 4-up mode, activate the correct controls based on which quadrant the
+// pointer went down in. Disabled controls ignore further events.
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (!fourUpMode) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  const nx = (e.clientX - rect.left) / rect.width;
+  const ny = (e.clientY - rect.top)  / rect.height;
+  // Top-left = face, top-right = pov, bottom-left = ceiling, bottom-right = perspective
+  const inRight  = nx > 0.5;
+  const inBottom = ny > 0.5;
+  if (inBottom && !inRight) {
+    controls.enabled        = false;
+    ceilingControls.enabled = true;
+  } else if (inBottom && inRight) {
+    controls.enabled        = true;
+    ceilingControls.enabled = false;
+  } else {
+    controls.enabled        = false;
+    ceilingControls.enabled = false;
+  }
+});
+
 // ── Lighting ──
 const ambient = new THREE.AmbientLight(0xffffff, 0.80);
 scene.add(ambient);
@@ -4149,8 +4312,14 @@ function resize() {
   const w = container.clientWidth  || container.offsetWidth  || 600;
   const h = container.clientHeight || container.offsetHeight || 500;
   renderer.setSize(w, h);
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
+  renderer.setViewport(0, 0, w, h);
+  renderer.setScissorTest(false);
+  // All cameras share the same aspect (equal 2×2 quads have the same ratio as full)
+  const aspect = w / h;
+  [camera, povCamera, ceilingCamera].forEach(cam => {
+    cam.aspect = aspect;
+    cam.updateProjectionMatrix();
+  });
 }
 resize();
 window.addEventListener('resize', resize);
@@ -4449,8 +4618,10 @@ function render() {
     robot.rotation.x     = (s.bodyPitchArc || 0)  * Math.PI / 180;
     applyColors();
     renderer.setClearColor(new THREE.Color(window.colors?.stageBg ?? '#0a0a0f'));
-
     ball.visible = !!(p.showBall);
+
+    // Update POV camera from head world transform + eye gaze
+    _updatePovCamera(s);
 
     // POI markers + HTML label projection
     const pois = window.pois || [];
@@ -4463,11 +4634,9 @@ function render() {
       const isActive = s.poiIdx === i;
       const fam = poi.familiarity;
 
-      // Scale marker by cumulative attention (1× baseline → up to 2.2× for most-watched)
-      const attNorm = poi.attention / maxAttention;           // 0..1 relative to session leader
+      const attNorm = poi.attention / maxAttention;
       poi.mesh.scale.setScalar(1 + attNorm * 1.2);
 
-      // Glow: active = white flash; novel = full own colour; familiar = dim
       if (isActive) {
         poi.mesh.material.emissive.setHex(0xffffff);
         poi.mesh.material.emissiveIntensity = 0.45;
@@ -4479,16 +4648,22 @@ function render() {
       }
       poi.mesh.rotation.y += 0.008;
 
-      // Attention bar fill (relative to session leader)
       if (poi.fillEl) poi.fillEl.style.width = `${Math.round(attNorm * 100)}%`;
 
-      // Project world position → screen coords for the HTML label
+      // Label projection — in 4-up mode, perspective lives in bottom-right quadrant
       _labelPos.copy(poi.mesh.position);
-      _labelPos.y += 0.45 + attNorm * 0.3;  // label rises with marker size
+      _labelPos.y += 0.45 + attNorm * 0.3;
       _labelPos.project(camera);
       const behind = _labelPos.z > 1;
-      const sx = (_labelPos.x * 0.5 + 0.5) * cw;
-      const sy = (-_labelPos.y * 0.5 + 0.5) * ch;
+      let sx, sy;
+      if (fourUpMode) {
+        const hw = cw / 2, hh = ch / 2;
+        sx = (_labelPos.x * 0.5 + 0.5) * hw + hw;   // right half
+        sy = (-_labelPos.y * 0.5 + 0.5) * hh + hh;  // bottom half
+      } else {
+        sx = (_labelPos.x * 0.5 + 0.5) * cw;
+        sy = (-_labelPos.y * 0.5 + 0.5) * ch;
+      }
       poi.el.style.display = (show && !behind) ? 'block' : 'none';
       poi.el.style.left    = `${sx}px`;
       poi.el.style.top     = `${sy}px`;
@@ -4496,8 +4671,96 @@ function render() {
     });
   }
 
+  if (fourUpMode) {
+    _renderFourUp();
+  } else if (activeView === 'pov') {
+    renderer.render(scene, povCamera);
+  } else if (activeView === 'ceiling') {
+    ceilingControls.update();
+    renderer.render(scene, ceilingCamera);
+  } else {
+    controls.update();
+    renderer.render(scene, camera);
+  }
+}
+
+// ── POV camera update ─────────────────────────────────────────────────────
+// Position at head world origin; look direction = head orientation + eye gaze.
+function _updatePovCamera(s) {
+  headGroup.getWorldPosition(_povHeadPos);
+  headGroup.getWorldQuaternion(_povHeadQuat);
+
+  // Eye gaze in [-1,1] → small angular offsets (±14° H, ±10° V)
+  const gazeH =  (s.gazeX || 0) * 0.24;
+  const gazeV = -(s.gazeY || 0) * 0.17;
+
+  // Build look direction in head-local space (+Z is robot's forward)
+  _povLookDir.set(
+    Math.sin(gazeH),
+    Math.sin(gazeV),
+    Math.cos(gazeH) * Math.cos(gazeV)
+  ).normalize().applyQuaternion(_povHeadQuat);
+
+  povCamera.position.copy(_povHeadPos);
+  _povTarget.copy(_povHeadPos).addScaledVector(_povLookDir, 10);
+  povCamera.lookAt(_povTarget);
+}
+
+// ── Four-up rendering ─────────────────────────────────────────────────────
+// Renders three Three.js cameras into viewport quadrants using scissor test.
+// Top-left quadrant is filled by the HTML face canvas overlay (not Three.js).
+function _renderFourUp() {
+  const W = renderer.domElement.width;
+  const H = renderer.domElement.height;
+  const hw = Math.floor(W / 2);
+  const hh = Math.floor(H / 2);
+
+  renderer.autoClear = false;
+  renderer.setScissorTest(false);
+  renderer.clear();                   // full clear (color + depth)
+  renderer.setScissorTest(true);
+
+  // Top-right: POV  (Three.js y from bottom → top half = y=hh)
+  renderer.setViewport(hw, hh, hw, hh);
+  renderer.setScissor(hw, hh, hw, hh);
+  renderer.clearDepth();
+  renderer.render(scene, povCamera);
+
+  // Bottom-left: Ceiling
+  ceilingControls.update();
+  renderer.setViewport(0, 0, hw, hh);
+  renderer.setScissor(0, 0, hw, hh);
+  renderer.clearDepth();
+  renderer.render(scene, ceilingCamera);
+
+  // Bottom-right: Perspective
   controls.update();
+  renderer.setViewport(hw, 0, hw, hh);
+  renderer.setScissor(hw, 0, hw, hh);
+  renderer.clearDepth();
   renderer.render(scene, camera);
+
+  // Restore full viewport
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, W, H);
+  renderer.autoClear = true;
+}
+
+// ── Camera mode API (called from main script) ─────────────────────────────
+function setFourUpMode(on) {
+  fourUpMode = on;
+  if (!on) {
+    // Restore appropriate single-view controls
+    controls.enabled        = (activeView === 'perspective');
+    ceilingControls.enabled = (activeView === 'ceiling');
+  }
+  resize();
+}
+
+function setActiveView(view) {
+  activeView = view;
+  controls.enabled        = (view === 'perspective');
+  ceilingControls.enabled = (view === 'ceiling');
 }
 
 function applyColors() {
@@ -4508,7 +4771,7 @@ function applyColors() {
   wheelMat.color.set(c.wheelColor);
 }
 
-window.three = { preUpdate, render, resize, applyColors, setAxisLock, setBallY };
+window.three = { preUpdate, render, resize, applyColors, setAxisLock, setBallY, setFourUpMode, setActiveView };
 </script>
 
 </body>
