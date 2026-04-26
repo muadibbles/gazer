@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GAZER v0.30</title>
+  <title>GAZER v0.33</title>
   <script type="importmap">
   {
     "imports": {
@@ -705,11 +705,13 @@ textarea.json-area {
 .stage.mode-3d > #canvas { opacity: 0; pointer-events: none; }
 
 /* ── 4-up mode ─────────────────────────────────────────── */
-/* Face canvas sits in top-left quadrant */
+.stage.mode-4up { overflow: hidden; }
+/* Face canvas sits in top-left quadrant.
+   Size is set by JS (_resizeCanvas4up) to the largest square that fits —
+   stage background shows as bars when quadrant aspect ratio != 1:1. */
 .stage.mode-4up > #canvas {
   position: absolute;
   left: 0; top: 0;
-  width: 50%; height: 50%;
   opacity: 1 !important;
   pointer-events: none;
   z-index: 3;
@@ -899,7 +901,7 @@ textarea.json-area {
 
 <header>
   <h1><span class="status-dot"></span>Gazer</h1>
-  <span>v0.30 — robot eye behavior system</span>
+  <span>v0.33 — robot eye behavior system</span>
 </header>
 
 <div class="left-panel">
@@ -1411,6 +1413,9 @@ const params = {
   showMouth:       true,
   showBrows:       true,
   showPupil:       true,
+  showIris:        false,
+  showLimbalRing:  false,
+  showCornealSpec: false,
   showLids:        true,
 
   // ── Nose ──
@@ -3157,56 +3162,58 @@ function drawEye(eye) {
 
   // ── Iris assembly (moves with pupil position) ──
   if (params.showPupil) {
-    // Limbal ring — dark border at iris edge (marks iris/sclera junction)
-    // Drawn first, slightly larger than iris fill, to create a thin dark rim
-    ctx.beginPath();
-    ctx.ellipse(pupilX, pupilY, irisRx, irisRy, rot, 0, Math.PI * 2);
-    ctx.fillStyle = hexToRgba('#000000', 0.40);
-    ctx.fill();
+    if (params.showLimbalRing) {
+      // Limbal ring — dark border at iris edge (marks iris/sclera junction)
+      ctx.beginPath();
+      ctx.ellipse(pupilX, pupilY, irisRx, irisRy, rot, 0, Math.PI * 2);
+      ctx.fillStyle = hexToRgba('#000000', 0.40);
+      ctx.fill();
+    }
 
-    // Iris base fill — desaturated amber, reads as optical instrument not cartoon eye
-    const irisInnerRx = irisRx * 0.90;  // slightly inside limbal ring
-    const irisInnerRy = irisRy * 0.90;
-    ctx.beginPath();
-    ctx.ellipse(pupilX, pupilY, irisInnerRx, irisInnerRy, rot, 0, Math.PI * 2);
-    ctx.fillStyle = colors.irisColor;
-    ctx.fill();
+    if (params.showIris) {
+      // Iris base fill
+      const irisInnerRx = irisRx * 0.90;
+      const irisInnerRy = irisRy * 0.90;
+      ctx.beginPath();
+      ctx.ellipse(pupilX, pupilY, irisInnerRx, irisInnerRy, rot, 0, Math.PI * 2);
+      ctx.fillStyle = colors.irisColor;
+      ctx.fill();
 
-    // Iris depth gradient — radial darkening toward edge implies 3D structure behind lens
-    const irisDepth = ctx.createRadialGradient(
-      pupilX, pupilY, irisInnerRx * 0.25,
-      pupilX, pupilY, irisInnerRx
-    );
-    irisDepth.addColorStop(0.0, 'rgba(0,0,0,0.00)');
-    irisDepth.addColorStop(0.55, 'rgba(0,0,0,0.00)');
-    irisDepth.addColorStop(1.0, 'rgba(0,0,0,0.32)');
-    ctx.beginPath();
-    ctx.ellipse(pupilX, pupilY, irisInnerRx, irisInnerRy, rot, 0, Math.PI * 2);
-    ctx.fillStyle = irisDepth;
-    ctx.fill();
+      // Iris depth gradient — radial darkening toward edge implies 3D structure behind lens
+      const irisDepth = ctx.createRadialGradient(
+        pupilX, pupilY, irisInnerRx * 0.25,
+        pupilX, pupilY, irisInnerRx
+      );
+      irisDepth.addColorStop(0.0, 'rgba(0,0,0,0.00)');
+      irisDepth.addColorStop(0.55, 'rgba(0,0,0,0.00)');
+      irisDepth.addColorStop(1.0, 'rgba(0,0,0,0.32)');
+      ctx.beginPath();
+      ctx.ellipse(pupilX, pupilY, irisInnerRx, irisInnerRy, rot, 0, Math.PI * 2);
+      ctx.fillStyle = irisDepth;
+      ctx.fill();
+    }
 
-    // Pupil — appears to float behind the iris (depth implied by iris gradient above it)
+    // Pupil — always drawn when showPupil is true
     ctx.beginPath();
     ctx.ellipse(pupilX, pupilY, pupilRx, pupilRy, rot, 0, Math.PI * 2);
     ctx.fillStyle = colors.pupilColor;
     ctx.fill();
 
-    // Corneal specular — small off-center highlight implying a curved physical lens
-    // Positioned upper-left, tracks with iris/pupil, slightly independent of gaze
-    // (a real corneal reflection tracks the light source, not the gaze direction)
-    const specR   = rx * params.cornealSpecSize;
-    const specOff = rx * params.cornealSpecOffset;
-    // Bias toward upper-left of iris, partially offset from pure pupil-center tracking
-    const specLx  = pupilX * 0.7 + cx * 0.3 - specOff * 0.55;
-    const specLy  = pupilY * 0.7 + cy * 0.3 - specOff * 0.75;
-    const specGrad = ctx.createRadialGradient(specLx, specLy, 0, specLx, specLy, specR);
-    specGrad.addColorStop(0.0, `rgba(255,255,255,${params.cornealSpecAlpha})`);
-    specGrad.addColorStop(0.4, `rgba(255,255,255,${params.cornealSpecAlpha * 0.35})`);
-    specGrad.addColorStop(1.0, 'rgba(255,255,255,0)');
-    ctx.beginPath();
-    ctx.ellipse(specLx, specLy, specR, specR * 0.75, rot - 0.4, 0, Math.PI * 2);
-    ctx.fillStyle = specGrad;
-    ctx.fill();
+    if (params.showCornealSpec) {
+      // Corneal specular — small off-center highlight implying a curved physical lens
+      const specR   = rx * params.cornealSpecSize;
+      const specOff = rx * params.cornealSpecOffset;
+      const specLx  = pupilX * 0.7 + cx * 0.3 - specOff * 0.55;
+      const specLy  = pupilY * 0.7 + cy * 0.3 - specOff * 0.75;
+      const specGrad = ctx.createRadialGradient(specLx, specLy, 0, specLx, specLy, specR);
+      specGrad.addColorStop(0.0, `rgba(255,255,255,${params.cornealSpecAlpha})`);
+      specGrad.addColorStop(0.4, `rgba(255,255,255,${params.cornealSpecAlpha * 0.35})`);
+      specGrad.addColorStop(1.0, 'rgba(255,255,255,0)');
+      ctx.beginPath();
+      ctx.ellipse(specLx, specLy, specR, specR * 0.75, rot - 0.4, 0, Math.PI * 2);
+      ctx.fillStyle = specGrad;
+      ctx.fill();
+    }
   }
 
   ctx.restore();
@@ -3872,13 +3879,6 @@ function saveConfig() {
     colors:       { ...colors },
     poiPositions: poiPositions.length ? poiPositions : undefined,
     cameras:      window.three?.getCameras(),
-    // Persist robot pose and battery level across page reloads
-    drive: window.driveState ? {
-      x:       window.driveState.drivePos?.x  || 0,
-      z:       window.driveState.drivePos?.z  || 0,
-      yaw:     window.driveState.driveYaw     || 0,
-      battery: window.batteryLevel            ?? 1,
-    } : undefined,
   }));
 }
 
@@ -3922,6 +3922,16 @@ function setView(v) {
   stage.classList.toggle('mode-3d',  is3d);
   stage.classList.toggle('mode-4up', is4up);
 
+  // In 4-up mode, display the face canvas as the largest square that fits in the
+  // top-left quadrant. The pixel buffer stays 600×600 (square); CSS size is set in
+  // px so the face never clips or distorts. Black bars fill leftover quadrant space.
+  if (is4up) {
+    _resizeCanvas4up(stage);
+  } else {
+    canvas.style.width  = '';
+    canvas.style.height = '';
+  }
+
   if (is3d && window.three) window.three.resize();
   window.three?.setFourUpMode(is4up);
   if (!is4up && is3d) window.three?.setActiveView(v);
@@ -3932,6 +3942,20 @@ function setView(v) {
     if (btn) btn.classList.toggle('active', id === v);
   });
 }
+
+// Fit face canvas as the largest square inside the top-left quadrant.
+// The 600×600 pixel buffer is square; CSS display size must also be square.
+function _resizeCanvas4up(stage) {
+  const s = Math.min(Math.floor(stage.clientWidth / 2), Math.floor(stage.clientHeight / 2));
+  canvas.style.width  = s + 'px';
+  canvas.style.height = s + 'px';
+}
+
+// Keep canvas display size in sync when the window is resized in 4-up mode
+window.addEventListener('resize', () => {
+  const stage = document.querySelector('.stage');
+  if (stage && stage.classList.contains('mode-4up')) _resizeCanvas4up(stage);
+});
 
 function makeColorRow(key, label, onChange) {
   const row = document.createElement('div');
@@ -4498,11 +4522,15 @@ function buildControlPanels() {
       ['pupilSpacing', '↳ Pupil',   -1,    1,   0.01, 2, true],
     ],
     'panel-pupil': [
-      ['showPupil',    'Visible',   'bool'],
-      ['pupilSize',    'Size',      0.05, 0.95, 0.01, 2],
-      ['pupilTravel',  'Travel',    0,    0.90, 0.01, 2],
-      ['pupilBiasX',   'Bias X',   -1,    1,   0.01, 2],
-      ['pupilBiasY',   'Bias Y',   -1,    1,   0.01, 2],
+      ['showPupil',       'Visible',        'bool'],
+      ['pupilSize',       'Size',           0.05, 0.95, 0.01, 2],
+      ['pupilTravel',     'Travel',         0,    0.90, 0.01, 2],
+      ['pupilBiasX',      'Bias X',        -1,    1,   0.01, 2],
+      ['pupilBiasY',      'Bias Y',        -1,    1,   0.01, 2],
+      ['showIris',        'Iris',           'bool'],
+      ['irisSize',        '↳ Size',         0.4,  0.95, 0.01, 2, true],
+      ['showLimbalRing',  'Limbal ring',    'bool'],
+      ['showCornealSpec', 'Highlight',      'bool'],
     ],
     'panel-nose': [
       ['showNose',       'Visible',    'bool'],
@@ -4563,7 +4591,6 @@ function buildControlPanels() {
       ['pauseMin',          'Pause min',          0.1,  10,  0.1,  1],
       ['pauseMax',          'Pause max',          0.1,  20,  0.1,  1],
       ['microSaccade',       'Micro-drift',      0,    1,    0.01,  2],
-      ['irisSize',           'Iris size',         0.4,  0.95, 0.01,  2],
       ['cornealSpecSize',    'Specular size',      0,    0.25, 0.005, 3],
       ['cornealSpecOffset',  'Specular offset',    0,    0.6,  0.01,  2],
       ['cornealSpecAlpha',   'Specular opacity',   0,    1.0,  0.05,  2],
@@ -4685,33 +4712,47 @@ function syncAllSliders() {
 const stateMonitorEl = document.getElementById('state-monitor');
 const prevStateDisplay = {}; // track prev values to flash red on change
 
+// Pre-create state monitor rows once — updateStateMonitor updates textContent only,
+// avoiding 60 Hz innerHTML replacement which triggers full DOM reflow each frame.
+const _SMON_KEYS = [
+  'attn', 'affect', 'beh.timer', 'gaze.x', 'gaze.y',
+  'arc.active', 'arc.t', 'arc.end.x', 'arc.end.y',
+  'blink.state', 'blink.t', 'active.task',
+];
+const _smonValEls = {};
+(function() {
+  if (!stateMonitorEl) return;
+  stateMonitorEl.innerHTML = _SMON_KEYS.map(k =>
+    `<div class="state-row"><span class="state-key">${k}</span><span class="state-val" id="smon-${k.replace(/\./g,'-')}"></span></div>`
+  ).join('');
+  _SMON_KEYS.forEach(k => { _smonValEls[k] = document.getElementById(`smon-${k.replace(/\./g,'-')}`); });
+})();
+
 function updateStateMonitor() {
   if (!stateMonitorEl) return;
-
-  // Pick the most useful state fields to show
-  const rows = [
-    ['attn',        state.attn],
-    ['affect',      state.affect],
-    ['beh.timer',   state.behaviorTimer.toFixed(2)],
-    ['gaze.x',      state.gazeX.toFixed(3)],
-    ['gaze.y',      state.gazeY.toFixed(3)],
-    ['arc.active',  state.arc.active ? 'YES' : 'no'],
-    ['arc.t',       state.arc.active ? state.arc.t.toFixed(3) : '—'],
-    ['arc.end.x',   state.arc.endX.toFixed(3)],
-    ['arc.end.y',   state.arc.endY.toFixed(3)],
-    ['blink.state', state.blink.state],
-    ['blink.t',     state.blink.t.toFixed(3)],
-    ['active.task', state.activeTask ? state.activeTask.action : 'none'],
-  ];
-
-  stateMonitorEl.innerHTML = rows.map(([key, val]) => {
-    const changed = prevStateDisplay[key] !== undefined && prevStateDisplay[key] !== String(val);
-    prevStateDisplay[key] = String(val);
-    return `<div class="state-row">
-      <span class="state-key">${key}</span>
-      <span class="state-val${changed ? ' changed' : ''}">${val}</span>
-    </div>`;
-  }).join('');
+  const vals = {
+    'attn':        state.attn,
+    'affect':      state.affect,
+    'beh.timer':   state.behaviorTimer.toFixed(2),
+    'gaze.x':      state.gazeX.toFixed(3),
+    'gaze.y':      state.gazeY.toFixed(3),
+    'arc.active':  state.arc.active ? 'YES' : 'no',
+    'arc.t':       state.arc.active ? state.arc.t.toFixed(3) : '—',
+    'arc.end.x':   state.arc.endX.toFixed(3),
+    'arc.end.y':   state.arc.endY.toFixed(3),
+    'blink.state': state.blink.state,
+    'blink.t':     state.blink.t.toFixed(3),
+    'active.task': state.activeTask ? state.activeTask.action : 'none',
+  };
+  for (const k of _SMON_KEYS) {
+    const el = _smonValEls[k];
+    if (!el) continue;
+    const v = String(vals[k]);
+    const changed = prevStateDisplay[k] !== undefined && prevStateDisplay[k] !== v;
+    prevStateDisplay[k] = v;
+    if (el.textContent !== v) el.textContent = v;
+    el.classList.toggle('changed', changed);
+  }
 }
 
 const logEl = document.getElementById('log');
@@ -6249,10 +6290,18 @@ function preUpdate(dt) {
       mobilityState = 'returning';
     }
 
-    // Arrived at charger — switch to charging state
+    // Arrived at charger — switch to charging state, leave when full
     if (atCharger()) {
-      mobilityState = 'charging';
-      mobilityGoal  = null;
+      if (battery >= 0.95 && mobilityState === 'charging') {
+        // Fully charged — pick a new wander target to move away
+        mobilityGoal    = pickWanderTarget();
+        mobilityTimer   = 0;
+        mobilityLegDone = false;
+        mobilityState   = 'wander';
+      } else {
+        mobilityState = 'charging';
+        mobilityGoal  = null;
+      }
     }
 
     mobilityTimer += dt;
@@ -6605,15 +6654,6 @@ try {
   if (saved?.cameras) restoreCameras(saved.cameras);
 } catch (_) {}
 
-// Restore saved drive state (position, heading, battery) from localStorage
-try {
-  const saved = JSON.parse(localStorage.getItem('gazer_config'));
-  if (saved?.drive) {
-    drivePos.set(saved.drive.x || 0, 0, saved.drive.z || 0);
-    driveYaw = saved.drive.yaw    || 0;
-    battery  = saved.drive.battery != null ? saved.drive.battery : 1.0;
-  }
-} catch (_) {}
 
 // Return current robot pose in world space (called from main script or external tools)
 function getRobotPose() {
