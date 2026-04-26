@@ -1,0 +1,28 @@
+{
+  "params": {
+    "eyeRx": 68, "eyeRy": 62, "eyeSpacing": 218, "eyeRotation": 0,
+    "pupilSize": 0.44, "irisSize": 0.70, "cornealSpecSize": 0.08,
+    "cornealSpecOffset": 0.24, "cornealSpecAlpha": 0.50,
+    "browWidth": 125, "browThickness": 12, "browArch": 10, "browOffsetY": 88,
+    "browSpacingOffset": 0, "browRotation": 0, "browTaperInner": 0, "browTaperOuter": 0,
+    "lidOpenness": 0.78, "blinkCloseSpeed": 0.025, "blinkOpenSpeed": 0.14,
+    "blinkEyeOffset": 0.020, "blinkInterval": 4.0,
+    "blinkSquintDur": 0.020, "blinkSquintDepth": 0.38, "blinkLidBow": 0.28,
+    "blinkClosePos": 1.0, "blinkLowerRise": 0.13, "blinkCrescentWidth": 0.11,
+    "halfBlinkChance": 0.25, "doubleBlink": 0.10,
+    "blinkAntAmt": 0, "blinkAntDur": 0.06, "blinkOvAmt": 0,
+    "blinkBrowReact": false, "blinkBrowAmt": 5,
+    "blinkMouthReact": false, "blinkMouthAmt": 7, "blinkReactDamp": 8,
+    "showMouth": true, "showBrows": true, "showNose": false, "showPupil": true, "showLids": true,
+    "mouthOffsetY": 110, "mouthWidth": 110, "mouthThickness": 10,
+    "mouthCurve": 3, "mouthTaper": 0, "mouthOpenMax": 22,
+    "upperLidPos": 0, "lowerLidPos": 0, "lidCurvature": 0, "lidRotation": 0,
+    "pupilTravel": 0.38, "pupilBiasX": 0, "pupilBiasY": 0, "pupilSpacing": 0,
+    "squashStretch": 0.18
+  },
+  "colors": {
+    "eyeColor": "#e8e0d5", "pupilColor": "#1c1410", "irisColor": "#8a6850",
+    "glowColor": "#d4a870", "lidColor": "#161410", "browColor": "#c8b898",
+    "canvasBg": "#110f0e", "mouthColor": "#c8b898", "mouthFillColor": "#100e0d"
+  }
+}

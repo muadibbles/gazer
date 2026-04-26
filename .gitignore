@@ -1,0 +1,6 @@
+.aider*
+.claude/
+.windsurf/
+__pycache__/
+research/pdfs/
+research/curated/
