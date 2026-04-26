@@ -140,7 +140,7 @@ Pressure scoring  ──→  winning behavior state (with hysteresis)
     ├──→  selectAttentionPOI()  ──→  POI_BEHAVIOR_AFFINITY × novelty weight → POI index
     │         │
     │         ▼
-    │     trackWorldPoint(poi.position)  ──→  head/body/eye spring physics
+    │     trackWorldPoint(poi.position)  ──→  head motion profile + drive kinematics
     │
     ▼
 setAttn() / setAffect()  ──→  Compositor

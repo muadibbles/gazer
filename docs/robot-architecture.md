@@ -6,7 +6,7 @@ Design notes for evolving gazer from a browser simulation into a deployable robo
 
 ## The core problem
 
-Right now the browser **is** the engine. The compositor, spring physics, saccade planner, and renderer all live in one `index.html`. That works fine for development and design iteration, but it has the wrong shape for a real robot:
+Right now the browser **is** the engine. The compositor, head motion profiles, saccade planner, and renderer all live in one `index.html`. That works fine for development and design iteration, but it has the wrong shape for a real robot:
 
 - The robot needs to run headlessly, without a browser
 - A human operator needs to observe what the robot is actually doing, not a separate simulation of it
@@ -26,7 +26,7 @@ The fix is an architectural inversion: separate execution from observation, and 
 │  ┌──────────────────────┐   │
 │  │   Behavior engine    │   │
 │  │  compositor          │   │
-│  │  spring physics      │   │
+│  │  motion profiles     │   │
 │  │  saccade planner     │   │
 │  │  state machine       │   │
 │  └──────────┬───────────┘   │
@@ -176,7 +176,7 @@ Each of these is a small independent process that normalizes its input into comm
 The current `index.html` needs to be split so the engine can run without a browser:
 
 ```
-engine.js          — compositor, state machine, spring physics, behaviors, saccade planner
+engine.js          — compositor, state machine, head motion profiles, behaviors, saccade planner, mobility
 renderer.canvas.js — draws eyes to a 2D canvas (current EyeRenderer)
 renderer.three.js  — drives Three.js body scene (current BodyController)
 renderer.oled.js   — writes pixel buffer to SSD1306/SH1106 via i2c
@@ -215,7 +215,7 @@ renderer.render(state, params)  // actuate outputs for this tick
 
 ## Relationship to current codebase
 
-Nothing in the current `index.html` is wasted. The rendering code, the compositor, the behaviors, the spring physics — all of it ports directly. The work is:
+Nothing in the current `index.html` is wasted. The rendering code, the compositor, the behaviors, the motion profiles — all of it ports directly. The work is:
 
 1. Extract engine from HTML into a standalone module
 2. Add a state broadcaster to the engine's tick loop (one call at the end of `update()`)

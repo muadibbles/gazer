@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GAZER v0.26</title>
+  <title>GAZER v0.30</title>
   <script type="importmap">
   {
     "imports": {
@@ -388,6 +388,16 @@ button.active {
   min-height: 0;
 }
 
+.session-timer {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--fg);
+  text-align: center;
+  margin-bottom: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
 .log {
   font-size: 10px;
   color: var(--text);
@@ -428,6 +438,8 @@ button.active {
   padding: 10px 0 6px;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
+  height: 100px;
+  overflow: hidden;
 }
 .poi-info-head {
   display: flex;
@@ -500,6 +512,60 @@ button.active {
 }
 
 /* Accordions */
+/* ── Face Design Presets ── */
+.design-preset-panel { margin-bottom: 8px; }
+.design-slots {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.design-slot-btn {
+  flex: 1;
+  padding: 6px 0;
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.design-slot-btn:hover { border-color: var(--iris); color: var(--text-bright); }
+.design-slot-btn.active { border-color: var(--iris); color: var(--iris); background: rgba(74,247,196,0.08); }
+.design-actions {
+  display: flex;
+  gap: 6px;
+}
+.design-action-btn {
+  flex: 1;
+  padding: 5px 0;
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.1s;
+  text-transform: uppercase;
+}
+.design-action-btn:hover { border-color: var(--iris); color: var(--text-bright); }
+.design-action-btn.save-btn:hover { border-color: #f97; color: #f97; }
+.design-slot-label {
+  font-size: 8px;
+  color: var(--text-dim, var(--text));
+  letter-spacing: 0.1em;
+  text-align: center;
+  margin-top: 3px;
+  opacity: 0.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .accordion { margin-bottom: 4px; }
 .acc-header {
   width: 100%;
@@ -704,6 +770,33 @@ textarea.json-area {
   color: rgba(255,255,255,0.9);
 }
 
+/* Scene panel POI toggles */
+.poi-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 11px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+.poi-toggle-row:hover { color: var(--text-bright); }
+.poi-toggle-row input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  accent-color: var(--iris);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.poi-toggle-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
 /* POI overlay labels */
 .poi-label {
   position: absolute;
@@ -806,10 +899,11 @@ textarea.json-area {
 
 <header>
   <h1><span class="status-dot"></span>Gazer</h1>
-  <span>v0.26 — robot eye behavior system</span>
+  <span>v0.30 — robot eye behavior system</span>
 </header>
 
 <div class="left-panel">
+  <div class="session-timer" id="session-timer">0:00:00</div>
   <div class="view-btn-row">
     <button class="view-btn" id="vbtn-face"        onclick="setView('face')">Face</button>
     <button class="view-btn" id="vbtn-pov"         onclick="setView('pov')">POV</button>
@@ -832,6 +926,9 @@ textarea.json-area {
     </label>
     <label class="battery-mobility">
       <input type="checkbox" id="mobility-enabled" checked> Mobility enabled
+    </label>
+    <label class="battery-mobility">
+      <input type="checkbox" id="heatmap-visible"> Show heatmap
     </label>
   </div>
   <div id="poi-info">
@@ -906,6 +1003,20 @@ textarea.json-area {
 </div>
 
 <div class="panel">
+
+  <!-- ── Face Design Presets ── -->
+  <div class="accordion" id="acc-designs">
+    <button class="acc-header" onclick="toggleAcc('acc-designs')">
+      Face Designs <span class="chevron">▾</span>
+    </button>
+    <div class="acc-body"><div class="acc-inner" style="padding-top:12px">
+      <div class="design-slots" id="design-slot-btns"></div>
+      <div class="design-actions">
+        <button class="design-action-btn" onclick="loadDesign()">LOAD</button>
+        <button class="design-action-btn save-btn" onclick="saveDesign()">SAVE</button>
+      </div>
+    </div></div>
+  </div>
 
   <div style="padding:6px 0 10px">
     <button id="principles-btn" onclick="togglePrinciples()"
@@ -1069,6 +1180,67 @@ textarea.json-area {
         <div id="drive-bar-resting"     class="drive-bar-row"><span id="drive-bar-name-resting"     class="drive-bar-name">resting</span><div class="drive-bar-track"><div id="drive-bar-fill-resting"     class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-resting"     class="drive-bar-val">0.00</span></div>
         <div id="drive-bar-interrupted" class="drive-bar-row"><span id="drive-bar-name-interrupted" class="drive-bar-name">interrupted</span><div class="drive-bar-track"><div id="drive-bar-fill-interrupted" class="drive-bar-fill" style="width:0%"></div></div><span id="drive-bar-val-interrupted" class="drive-bar-val">0.00</span></div>
       </div>
+
+    </div></div>
+  </div>
+
+  <div class="accordion" id="acc-scene">
+    <button class="acc-header" onclick="toggleAcc('acc-scene')">
+      Scene <span class="chevron">▾</span>
+    </button>
+    <div class="acc-body"><div class="acc-inner">
+      <div style="font-size:9px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">POIs — toggle to control which targets are active</div>
+
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <button onclick="(window.pois||[]).forEach((_,i)=>window.setPOIEnabled(i,true));document.querySelectorAll('.poi-toggle').forEach(c=>c.checked=true)"
+          style="flex:1;font-size:9px;letter-spacing:.1em;padding:4px 0;">ALL ON</button>
+        <button onclick="(window.pois||[]).forEach((_,i)=>window.setPOIEnabled(i,false));document.querySelectorAll('.poi-toggle').forEach(c=>c.checked=false)"
+          style="flex:1;font-size:9px;letter-spacing:.1em;padding:4px 0;">ALL OFF</button>
+      </div>
+
+      <div style="font-size:9px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:4px;border-bottom:1px solid var(--border);padding-bottom:4px;">People</div>
+      <label class="poi-toggle-row">
+        <input type="checkbox" class="poi-toggle" checked onchange="window.setPOIEnabled(0,this.checked)">
+        <span class="poi-toggle-dot" style="background:#ff8844"></span> Person
+      </label>
+      <label class="poi-toggle-row">
+        <input type="checkbox" class="poi-toggle" checked onchange="window.setPOIEnabled(1,this.checked)">
+        <span class="poi-toggle-dot" style="background:#ffbb55"></span> Child
+      </label>
+
+      <div style="font-size:9px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin:8px 0 4px;border-bottom:1px solid var(--border);padding-bottom:4px;">Pets</div>
+      <label class="poi-toggle-row">
+        <input type="checkbox" class="poi-toggle" checked onchange="window.setPOIEnabled(2,this.checked)">
+        <span class="poi-toggle-dot" style="background:#55ee88"></span> Cat
+      </label>
+      <label class="poi-toggle-row">
+        <input type="checkbox" class="poi-toggle" checked onchange="window.setPOIEnabled(3,this.checked)">
+        <span class="poi-toggle-dot" style="background:#44dd66"></span> Dog
+      </label>
+
+      <div style="font-size:9px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin:8px 0 4px;border-bottom:1px solid var(--border);padding-bottom:4px;">Objects</div>
+      <label class="poi-toggle-row">
+        <input type="checkbox" class="poi-toggle" checked onchange="window.setPOIEnabled(4,this.checked)">
+        <span class="poi-toggle-dot" style="background:#4488ff"></span> TV
+      </label>
+      <label class="poi-toggle-row">
+        <input type="checkbox" class="poi-toggle" checked onchange="window.setPOIEnabled(5,this.checked)">
+        <span class="poi-toggle-dot" style="background:#88ccff"></span> Window
+      </label>
+      <label class="poi-toggle-row">
+        <input type="checkbox" class="poi-toggle" checked onchange="window.setPOIEnabled(6,this.checked)">
+        <span class="poi-toggle-dot" style="background:#ff6699"></span> Food Bowl
+      </label>
+      <label class="poi-toggle-row">
+        <input type="checkbox" class="poi-toggle" checked onchange="window.setPOIEnabled(7,this.checked)">
+        <span class="poi-toggle-dot" style="background:#aa88ff"></span> Front Door
+      </label>
+
+      <div style="font-size:9px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin:8px 0 4px;border-bottom:1px solid var(--border);padding-bottom:4px;">Infrastructure</div>
+      <label class="poi-toggle-row">
+        <input type="checkbox" class="poi-toggle" checked onchange="window.setPOIEnabled(8,this.checked)">
+        <span class="poi-toggle-dot" style="background:#ffe033"></span> Charger
+      </label>
 
     </div></div>
   </div>
@@ -1269,13 +1441,20 @@ const params = {
   lidCurvature:    0,    // -1 = concave, 0 = straight, 1 = convex
   lidRotation:     0,    // degrees, tilts both lids relative to the eye
 
+  // ── Iris / rendering ──
+  irisSize:          0.72,  // iris outer radius as fraction of eye rx (pupil is 0.40)
+  cornealSpecSize:   0.10,  // specular highlight radius as fraction of eye rx
+  cornealSpecOffset: 0.28,  // specular offset from iris center (fraction of eye rx)
+  cornealSpecAlpha:  0.70,  // max opacity of specular highlight
+
   // ── Blink ──
   lidOpenness:     0.85,
   blinkInterval:   3.0,
-  blinkCloseSpeed: 0.07,
-  blinkOpenSpeed:  0.12,
+  blinkCloseSpeed: 0.022,  // fast snap close — real blinks close 4–5x faster than they open
+  blinkOpenSpeed:  0.11,   // slow lid lift — levator recruitment is gradual
   blinkHold:       0.05,
   doubleBlink:     0.15,
+  blinkEyeOffset:  0.018,  // per-eye phase desync — two eyes don't blink perfectly in sync
 
   // ── Gaze ──
   arcCurvature:    0.40,
@@ -1336,7 +1515,7 @@ const params = {
   blinkOvStiff:    120,   // spring stiffness
 
   // ── Blink lid shape ──
-  blinkSquintDur:     0.05,  // duration of pre-squint phase before snap close (s)
+  blinkSquintDur:     0.018, // duration of pre-squint phase before snap close (s)
   blinkSquintDepth:   0.35,  // how far pre-squint closes before snapping (0–1)
   blinkLidBow:        0.22,  // ⌣ bow depth on lid edge (fraction of displayRy)
   blinkClosePos:      1.00,  // fill arc centre target at t=1 (1.0 = full close; arc endpoint = closePos+bow)
@@ -1352,8 +1531,8 @@ const params = {
   // ── World attention (POIs) ──
   showPOIs:          true,   // show POI markers in 3D scene
   showBall:          false,  // show manual gaze ball
-  attentionHoldMin:  2.0,    // minimum POI fixation duration (s)
-  attentionHoldMax:  5.0,    // maximum POI fixation duration (s)
+  attentionHoldMin:  10.0,   // minimum POI fixation duration (s)
+  attentionHoldMax:  25.0,   // maximum POI fixation duration (s)
 
   // ── Personal time (spatial memory) ──
   ptEnabled:         true,   // bias saccades toward unvisited regions
@@ -1377,8 +1556,9 @@ const params = {
 const colors = {
   stageBg:    '#0a0a0f',
   canvasBg:   '#131318',
-  eyeColor:   '#ffffff',
-  pupilColor: '#000000',
+  eyeColor:   '#ebe8e1',  // off-white sclera — pure white reads as cartoon cel
+  pupilColor: '#1a1510',  // dark grey-brown — pure black reads as ink, not depth
+  irisColor:  '#7a6040',  // desaturated amber — reads as optical instrument, not cartoon eye
   glowColor:  '#4af7c4',
   lidColor:   '#131318',
   browColor:  '#ffffff',
@@ -1469,6 +1649,16 @@ const state = {
     timer: 0,
     nextBlink: 3,
     ftVel: 0,      // spring velocity for follow-through
+    eyeOffset: 0,  // per-blink phase offset applied to right eye (randomized each blink)
+  },
+
+  // Fixational drift — slow random walk between microsaccades
+  // Models the involuntary ocular drift that keeps resting gaze from looking dead
+  drift: {
+    x: 0, y: 0,          // current drift offset (normalized gaze units)
+    vx: 0, vy: 0,        // drift velocity
+    timer: 0,            // countdown to next microsaccade
+    interval: 0.6,       // seconds between microsaccades (randomized each time)
   },
 
   // Compositor — attention layer (gaze/saccade) + affect layer (expression)
@@ -1492,6 +1682,7 @@ const state = {
     pressure:     {},   // per-behavior pressure 0..1
     attnPinned:   false,
     affectPinned: false,
+    switchTimer:  0,    // time since last drive-initiated switch (not reset by micro-expressions)
   },
 
   behaviorTimer: 0,
@@ -1953,6 +2144,10 @@ function setupArcSegment(startX, startY, endX, endY) {
 }
 
 function triggerSaccade(targetX, targetY) {
+  // Reset drift offset — saccade lands on a new target, drift starts fresh
+  state.drift.x = 0; state.drift.y = 0;
+  state.drift.vx = 0; state.drift.vy = 0;
+
   const arc = state.arc;
   arc.curveSign = Math.random() > 0.5 ? 1 : -1;
 
@@ -2207,12 +2402,17 @@ function selectAttentionPOI() {
   const affinity = POI_BEHAVIOR_AFFINITY[state.attn] || POI_BEHAVIOR_AFFINITY.idle;
 
   const total = pois.reduce((s, p) => {
+    if (!p.enabled || p.category === 'charger') return s; // charger is mobility-only, not a gaze target
     const catMult = affinity[p.category] ?? 1.0;
     return s + Math.pow(Math.max(0.01, 1 - p.familiarity), params.ptStrength) * p.salience * catMult;
   }, 0);
 
+  // No enabled POIs — fall back to random saccade so head returns to center
+  if (total === 0) { state.poiIdx = -1; randomSaccade(); return; }
+
   let pick = Math.random() * total;
   for (let i = 0; i < pois.length; i++) {
+    if (!pois[i].enabled) continue; // skip disabled POIs
     const catMult = affinity[pois[i].category] ?? 1.0;
     const w = Math.pow(Math.max(0.01, 1 - pois[i].familiarity), params.ptStrength) * pois[i].salience * catMult;
     pick -= w;
@@ -2223,8 +2423,15 @@ function selectAttentionPOI() {
       return;
     }
   }
-  state.poiIdx = pois.length - 1;
-  state.attentionHoldTimer = params.attentionHoldMin;
+  // Floating-point edge case: pick the last enabled POI rather than a fixed index
+  for (let i = pois.length - 1; i >= 0; i--) {
+    if (pois[i].enabled) {
+      state.poiIdx = i;
+      state.attentionHoldTimer = params.attentionHoldMin;
+      return;
+    }
+  }
+  state.poiIdx = -1; randomSaccade();
 }
 
 // ─────────────────────────────────────────────
@@ -2380,6 +2587,8 @@ function updateBlink(dt) {
       b.timer = 0;
       logEvent('blink');
       b.halfBlink = (Math.random() < params.halfBlinkChance);
+      // Randomize per-eye phase offset — eyes don't blink in perfect sync
+      b.eyeOffset = (Math.random() * 2 - 1) * params.blinkEyeOffset;
       if (params.blinkAntAmt > 0) {
         // Widen before closing
         b.state = 'anticipating';
@@ -2652,21 +2861,67 @@ function update(dt) {
         randomSaccade();
       }
     }
-    // Micro-saccade drift while holding position (only when not POI-attending)
+    // Fixational drift + discrete microsaccades (only when not POI-attending)
+    // Models the involuntary eye motion that makes resting gaze feel alive.
+    // Two components:
+    //   1. Slow drift — random walk, applied as frame-delta to gaze position
+    //   2. Microsaccades — discrete corrective jumps that partially reset drift
     if (params.microSaccade > 0 && state.poiIdx < 0) {
-      state.gazeX += (Math.random() - 0.5) * params.microSaccade * 0.008;
-      state.gazeY += (Math.random() - 0.5) * params.microSaccade * 0.008;
-      state.gazeX = Math.max(-0.95, Math.min(0.95, state.gazeX));
-      state.gazeY = Math.max(-0.95, Math.min(0.95, state.gazeY));
+      const d = state.drift;
+      const scale = params.microSaccade * 0.010;  // convert param to gaze units
+
+      // Save previous drift position to compute delta applied to gaze
+      const prevX = d.x, prevY = d.y;
+
+      // 1. Drift: brownian motion with weak restoring force toward center
+      // restoreForce prevents unlimited accumulation — eye drifts then corrects
+      const restoreForce = 1.2;
+      d.vx += ((Math.random() - 0.5) * 0.6 - d.x * restoreForce) * dt;
+      d.vy += ((Math.random() - 0.5) * 0.6 - d.y * restoreForce) * dt;
+      d.vx *= 0.88;  // damping
+      d.vy *= 0.88;
+      d.x  += d.vx * dt * scale * 20;
+      d.y  += d.vy * dt * scale * 20;
+
+      // Clamp drift amplitude (keeps motion subtle — real fixational drift is <1° visual angle)
+      const driftMax = scale * 1.8;
+      const driftMag = Math.sqrt(d.x * d.x + d.y * d.y);
+      if (driftMag > driftMax) { d.x *= driftMax / driftMag; d.y *= driftMax / driftMag; }
+
+      // 2. Microsaccade: discrete corrective jump when timer fires
+      d.timer -= dt;
+      if (d.timer <= 0) {
+        // Jump partially back toward nominal center (corrects accumulated drift)
+        const corrFrac = 0.55 + Math.random() * 0.35;
+        d.x -= d.x * corrFrac;
+        d.y -= d.y * corrFrac;
+        d.vx *= 0.2;  // damp velocity so we don't immediately drift back the same way
+        d.vy *= 0.2;
+        // Next microsaccade in 0.4–1.2s (biologically ~1–2/s, variable)
+        d.timer = 0.4 + Math.random() * 0.8;
+      }
+
+      // Apply only the DELTA drift change each frame — prevents additive accumulation
+      const dx = d.x - prevX;
+      const dy = d.y - prevY;
+      state.gazeX = Math.max(-0.95, Math.min(0.95, state.gazeX + dx));
+      state.gazeY = Math.max(-0.95, Math.min(0.95, state.gazeY + dy));
     }
   }
 
-  // Attention hold countdown — when timer expires, release the current POI
+  // Attention hold countdown — when timer expires, release the current POI.
+  // Also release immediately if the current POI was disabled mid-hold.
   if (state.poiIdx >= 0) {
-    state.attentionHoldTimer -= dt;
-    if (state.attentionHoldTimer <= 0) {
+    const _curPoi = (window.pois || [])[state.poiIdx];
+    if (!_curPoi || !_curPoi.enabled) {
       state.poiIdx = -1;
-      // Leave behaviorTimer running so the gap pause plays out normally
+      state.attentionHoldTimer = 0;
+    } else {
+      state.attentionHoldTimer -= dt;
+      if (state.attentionHoldTimer <= 0) {
+        state.poiIdx = -1;
+        // Leave behaviorTimer running so the gap pause plays out normally
+      }
     }
   }
   } // end !rendererMode (arc + saccade block)
@@ -2879,6 +3134,10 @@ function drawEye(eye) {
   const pupilRx = rx * params.pupilSize;
   const pupilRy = displayRy * params.pupilSize;
 
+  // Iris dimensions — centered on pupil position (iris+pupil assembly moves together)
+  const irisRx = rx * params.irisSize;
+  const irisRy = displayRy * params.irisSize;
+
   // Subtle glow behind eye
   const glow = ctx.createRadialGradient(cx, cy, rx * 0.4, cx, cy, rx * 1.8);
   glow.addColorStop(0, hexToRgba(colors.glowColor, 0.07));
@@ -2888,7 +3147,7 @@ function drawEye(eye) {
   ctx.ellipse(cx, cy, rx * 1.8, displayRy * 1.8, rot, 0, Math.PI * 2);
   ctx.fill();
 
-  // Eye ellipse — clip so pupil stays inside
+  // Eye ellipse (sclera) — clip so everything inside stays within eye boundary
   ctx.save();
   ctx.beginPath();
   ctx.ellipse(cx, cy, rx, displayRy, rot, 0, Math.PI * 2);
@@ -2896,11 +3155,57 @@ function drawEye(eye) {
   ctx.fill();
   ctx.clip();
 
-  // Pupil — same aspect ratio, rotated with eye
+  // ── Iris assembly (moves with pupil position) ──
   if (params.showPupil) {
+    // Limbal ring — dark border at iris edge (marks iris/sclera junction)
+    // Drawn first, slightly larger than iris fill, to create a thin dark rim
+    ctx.beginPath();
+    ctx.ellipse(pupilX, pupilY, irisRx, irisRy, rot, 0, Math.PI * 2);
+    ctx.fillStyle = hexToRgba('#000000', 0.40);
+    ctx.fill();
+
+    // Iris base fill — desaturated amber, reads as optical instrument not cartoon eye
+    const irisInnerRx = irisRx * 0.90;  // slightly inside limbal ring
+    const irisInnerRy = irisRy * 0.90;
+    ctx.beginPath();
+    ctx.ellipse(pupilX, pupilY, irisInnerRx, irisInnerRy, rot, 0, Math.PI * 2);
+    ctx.fillStyle = colors.irisColor;
+    ctx.fill();
+
+    // Iris depth gradient — radial darkening toward edge implies 3D structure behind lens
+    const irisDepth = ctx.createRadialGradient(
+      pupilX, pupilY, irisInnerRx * 0.25,
+      pupilX, pupilY, irisInnerRx
+    );
+    irisDepth.addColorStop(0.0, 'rgba(0,0,0,0.00)');
+    irisDepth.addColorStop(0.55, 'rgba(0,0,0,0.00)');
+    irisDepth.addColorStop(1.0, 'rgba(0,0,0,0.32)');
+    ctx.beginPath();
+    ctx.ellipse(pupilX, pupilY, irisInnerRx, irisInnerRy, rot, 0, Math.PI * 2);
+    ctx.fillStyle = irisDepth;
+    ctx.fill();
+
+    // Pupil — appears to float behind the iris (depth implied by iris gradient above it)
     ctx.beginPath();
     ctx.ellipse(pupilX, pupilY, pupilRx, pupilRy, rot, 0, Math.PI * 2);
     ctx.fillStyle = colors.pupilColor;
+    ctx.fill();
+
+    // Corneal specular — small off-center highlight implying a curved physical lens
+    // Positioned upper-left, tracks with iris/pupil, slightly independent of gaze
+    // (a real corneal reflection tracks the light source, not the gaze direction)
+    const specR   = rx * params.cornealSpecSize;
+    const specOff = rx * params.cornealSpecOffset;
+    // Bias toward upper-left of iris, partially offset from pure pupil-center tracking
+    const specLx  = pupilX * 0.7 + cx * 0.3 - specOff * 0.55;
+    const specLy  = pupilY * 0.7 + cy * 0.3 - specOff * 0.75;
+    const specGrad = ctx.createRadialGradient(specLx, specLy, 0, specLx, specLy, specR);
+    specGrad.addColorStop(0.0, `rgba(255,255,255,${params.cornealSpecAlpha})`);
+    specGrad.addColorStop(0.4, `rgba(255,255,255,${params.cornealSpecAlpha * 0.35})`);
+    specGrad.addColorStop(1.0, 'rgba(255,255,255,0)');
+    ctx.beginPath();
+    ctx.ellipse(specLx, specLy, specR, specR * 0.75, rot - 0.4, 0, Math.PI * 2);
+    ctx.fillStyle = specGrad;
     ctx.fill();
   }
 
@@ -2970,7 +3275,12 @@ function drawLids(eye) {
 // expression lids. Upper lid sweeps down in face color; a ⌣ crescent edge in eye
 // color marks the lid position and remains as the closed-eye shape at t=1.
 function drawBlinkLid(eye) {
-  const t = state.blink.t;
+  // Apply per-eye phase offset — right eye (sign=1) lags or leads slightly,
+  // creating the slight temporal desync of real bilateral blinks.
+  const rawT  = state.blink.t;
+  const t     = eye.sign === 1
+    ? Math.max(0, rawT + state.blink.eyeOffset)
+    : rawT;
   if (t <= 0) return;
 
   const { cx, cy, rx, ry, rot } = eye;
@@ -3578,6 +3888,20 @@ function loadConfig() {
     if (!saved) return;
     if (saved.params) Object.assign(params, saved.params);
     if (saved.colors) Object.assign(colors, saved.colors);
+
+    // ── Version migrations ──
+    // Upgrade old default values to new defaults when the user hasn't customized them.
+    // Only touches values that were at the exact old default — custom changes are preserved.
+    if (saved.colors) {
+      // v0.28 → v0.30: off-white sclera + dark grey-brown pupil
+      if (colors.eyeColor   === '#ffffff') colors.eyeColor   = '#ebe8e1';
+      if (colors.pupilColor === '#000000') colors.pupilColor = '#1a1510';
+    }
+    if (saved.params) {
+      // v0.28 → v0.30: blink asymmetry defaults
+      if (saved.params.blinkCloseSpeed === 0.07)  params.blinkCloseSpeed = 0.022;
+      if (saved.params.blinkSquintDur  === 0.05)  params.blinkSquintDur  = 0.018;
+    }
     // poiPositions applied by Three.js module after pois are created
   } catch (e) { /* ignore corrupt data */ }
 }
@@ -3639,8 +3963,9 @@ function buildColorPanel() {
   [
     ['stageBg',    'Stage bg',  v => stage.style.background = v],
     ['canvasBg',   'Canvas bg', null],
-    ['eyeColor',   'Eye',       null],
+    ['eyeColor',   'Sclera',    null],
     ['pupilColor', 'Pupil',     null],
+    ['irisColor',  'Iris',      null],
     ['trailColor', 'Trail',     null],
     ['stiColor',   'STI',       null],
     ['noseColor',  'Nose',      null],
@@ -3833,18 +4158,22 @@ function updateDrive(dt) {
     if (v > winVal) { winKey = k; winVal = v; }
   }
 
-  // Don't fire while a blend is still in progress — let transitions complete
-  if (state.transBlend < 0.9) return;
+  // Use drive's own stability timer so micro-expressions on the affect layer
+  // don't block attn switches (microExpress resets transBlend but not switchTimer)
+  d.switchTimer += dt;
+  if (d.switchTimer < 0.15) return;
 
   // Only switch if not mid-hold (interrupted etc.) and margin exceeds hysteresis
   if (state.holdTimer <= 0) {
     if (!d.attnPinned && winKey !== state.attn &&
         winVal > (p[state.attn] || 0) + params.driveHysteresis) {
       setAttn(enforceTransition(state.attn, winKey));
+      d.switchTimer = 0;
     }
     if (!d.affectPinned && winKey !== state.affect &&
         winVal > (p[state.affect] || 0) + params.driveHysteresis) {
       setAffect(enforceTransition(state.affect, winKey));
+      d.switchTimer = 0;
     }
   }
 }
@@ -4212,12 +4541,13 @@ function buildControlPanels() {
     'panel-blink': [
       ['lidOpenness',        'Openness',       0.1,  1.0,  0.01,  2],
       ['blinkInterval',      'Interval',       0.5,  15,   0.1,   1],
-      ['blinkSquintDur',     'Squint dur',     0.01, 0.15, 0.005, 3],
+      ['blinkSquintDur',     'Squint dur',     0.005,0.15, 0.005, 3],
       ['blinkSquintDepth',   'Squint depth',   0,    0.8,  0.01,  2],
-      ['blinkCloseSpeed',    'Close speed',    0.02, 0.5,  0.01,  2],
+      ['blinkCloseSpeed',    'Close speed',    0.005,0.5,  0.005, 3],
       ['blinkOpenSpeed',     'Open speed',     0.02, 0.5,  0.01,  2],
       ['blinkHold',          'Hold',           0,    0.5,  0.01,  2],
       ['doubleBlink',        'Double blink',   0,    1.0,  0.01,  2],
+      ['blinkEyeOffset',     'Eye desync',     0,    0.08, 0.005, 3],
       ['blinkLidBow',        'Lid bow',        0,    0.5,  0.01,  2],
       ['blinkClosePos',      'Close pos',      0,    1.3,  0.01,  2],
       ['halfBlinkChance',    'Half-blink %',   0,    1.0,  0.01,  2],
@@ -4232,7 +4562,11 @@ function buildControlPanels() {
       ['gazeRangeY',        'Range Y',            0.05, 2,   0.01, 2],
       ['pauseMin',          'Pause min',          0.1,  10,  0.1,  1],
       ['pauseMax',          'Pause max',          0.1,  20,  0.1,  1],
-      ['microSaccade', 'Micro-drift', 0, 1, 0.01, 2],
+      ['microSaccade',       'Micro-drift',      0,    1,    0.01,  2],
+      ['irisSize',           'Iris size',         0.4,  0.95, 0.01,  2],
+      ['cornealSpecSize',    'Specular size',      0,    0.25, 0.005, 3],
+      ['cornealSpecOffset',  'Specular offset',    0,    0.6,  0.01,  2],
+      ['cornealSpecAlpha',   'Specular opacity',   0,    1.0,  0.05,  2],
     ],
     'panel-motion': [
       ['faceTranslateAmt',  'Face shift',    0,   50,  1,    0],
@@ -4285,8 +4619,8 @@ function buildControlPanels() {
       ['driveNoveltyDecay',  'Novelty decay',     0.01, 0.8,  0.01, 2],
       ['driveRiseRate',      'Rise rate',         0.1,  3.0,  0.05, 2],
       ['driveHysteresis',    'Hysteresis',        0.0,  0.5,  0.01, 2],
-      ['attentionHoldMin',   'Hold min (s)',      0.5,  10.0, 0.5,  1],
-      ['attentionHoldMax',   'Hold max (s)',      1.0,  15.0, 0.5,  1],
+      ['attentionHoldMin',   'Hold min (s)',      0.5,  60.0, 0.5,  1],
+      ['attentionHoldMax',   'Hold max (s)',      1.0,  120.0, 0.5, 1],
       ['ptEnabled',          'Personal time',     'bool'],
       ['ptStrength',         '↳ Novelty bias',    0.5,  5.0,  0.1,  1, true],
       ['ptDecay',            '↳ Decay rate',      0.0,  0.3,  0.005,3, true],
@@ -4356,7 +4690,8 @@ function updateStateMonitor() {
 
   // Pick the most useful state fields to show
   const rows = [
-    ['behavior',    state.behavior],
+    ['attn',        state.attn],
+    ['affect',      state.affect],
     ['beh.timer',   state.behaviorTimer.toFixed(2)],
     ['gaze.x',      state.gazeX.toFixed(3)],
     ['gaze.y',      state.gazeY.toFixed(3)],
@@ -4391,9 +4726,277 @@ function logEvent(msg) {
   ).join('');
 }
 
+// ─────────────────────────────────────────────
+//  FACE DESIGN PRESET SYSTEM
+// ─────────────────────────────────────────────
+
+// Which params and colors constitute a "face design" (visual only, no gaze/behavior).
+const FACE_DESIGN_PARAMS = [
+  'eyeRx','eyeRy','eyeRotation','eyeSpacing',
+  'pupilSize','pupilTravel','pupilBiasX','pupilBiasY','pupilSpacing',
+  'irisSize','cornealSpecSize','cornealSpecOffset','cornealSpecAlpha',
+  'browSpacingOffset','browOffsetY','browWidth','browThickness','browArch',
+  'browRotation','browTaperInner','browTaperOuter',
+  'showMouth','showBrows','showPupil','showLids','showNose',
+  'noseOffsetY','noseBridgeH','noseWidth','noseAngle','noseRotation','noseThickness',
+  'mouthOffsetY','mouthWidth','mouthThickness','mouthCurve','mouthTaper','mouthOpenMax',
+  'upperLidPos','lowerLidPos','lidCurvature','lidRotation',
+  'lidOpenness','blinkInterval','blinkCloseSpeed','blinkOpenSpeed','blinkHold',
+  'blinkSquintDur','blinkSquintDepth','blinkLidBow','blinkClosePos','blinkLowerRise',
+  'blinkCrescentWidth','halfBlinkChance','doubleBlink','blinkEyeOffset',
+  'blinkAntAmt','blinkAntDur','blinkOvAmt','blinkOvDamp','blinkOvStiff',
+  'blinkBrowReact','blinkBrowAmt','blinkMouthReact','blinkMouthAmt','blinkReactDamp',
+  'squashStretch',
+];
+const FACE_DESIGN_COLORS = [
+  'eyeColor','pupilColor','irisColor','glowColor','lidColor',
+  'browColor','noseColor','mouthColor','mouthFillColor','canvasBg',
+];
+
+// Extract current visual state into a design object
+function captureDesign() {
+  const p = {}, c = {};
+  FACE_DESIGN_PARAMS.forEach(k => { if (k in params) p[k] = params[k]; });
+  FACE_DESIGN_COLORS.forEach(k => { if (k in colors) c[k] = colors[k]; });
+  return { params: p, colors: c };
+}
+
+// Apply a design object to params/colors (merges, doesn't replace entire objects)
+function applyDesign(design) {
+  if (design.params) Object.assign(params, design.params);
+  if (design.colors) Object.assign(colors, design.colors);
+  syncAllSliders();
+  if (window.three?.applyColors) window.three.applyColors();
+}
+
+// ── Six pre-seeded designs ──
+
+const FACE_PRESETS = {
+  a: {
+    name: 'Organic',
+    params: {
+      eyeRx:70, eyeRy:70, eyeSpacing:220, eyeRotation:0,
+      pupilSize:0.40, irisSize:0.72, cornealSpecSize:0.10, cornealSpecOffset:0.28, cornealSpecAlpha:0.70,
+      browWidth:130, browThickness:14, browArch:18, browOffsetY:90,
+      lidOpenness:0.85, blinkCloseSpeed:0.022, blinkOpenSpeed:0.11, blinkEyeOffset:0.018,
+      blinkSquintDur:0.018, blinkSquintDepth:0.35, blinkLidBow:0.22,
+      showMouth:true, showBrows:true, showNose:false, mouthCurve:0, mouthWidth:120,
+      squashStretch:0.25,
+    },
+    colors: {
+      eyeColor:'#ebe8e1', pupilColor:'#1a1510', irisColor:'#7a6040',
+      glowColor:'#4af7c4', lidColor:'#131318', browColor:'#ebe8e1',
+      canvasBg:'#131318', mouthColor:'#ebe8e1', mouthFillColor:'#111118',
+    },
+  },
+
+  b: {
+    name: 'Cartoon',
+    params: {
+      eyeRx:76, eyeRy:76, eyeSpacing:220, eyeRotation:0,
+      pupilSize:0.38, irisSize:0.68, cornealSpecSize:0, cornealSpecOffset:0.28, cornealSpecAlpha:0,
+      browWidth:120, browThickness:16, browArch:22, browOffsetY:94,
+      lidOpenness:0.88, blinkCloseSpeed:0.07, blinkOpenSpeed:0.07, blinkEyeOffset:0,
+      blinkSquintDur:0.05, blinkSquintDepth:0.35, blinkLidBow:0.18,
+      showMouth:true, showBrows:true, showNose:false, mouthCurve:8, mouthWidth:100,
+      squashStretch:0.40,
+    },
+    colors: {
+      eyeColor:'#ffffff', pupilColor:'#000000', irisColor:'#2266dd',
+      glowColor:'#66aaff', lidColor:'#131318', browColor:'#ffffff',
+      canvasBg:'#131318', mouthColor:'#ffffff', mouthFillColor:'#111118',
+    },
+  },
+
+  c: {
+    name: 'Minimal',
+    params: {
+      eyeRx:65, eyeRy:55, eyeSpacing:230, eyeRotation:0,
+      pupilSize:0.52, irisSize:0.64, cornealSpecSize:0.06, cornealSpecOffset:0.22, cornealSpecAlpha:0.45,
+      browWidth:90, browThickness:8, browArch:6, browOffsetY:80,
+      lidOpenness:0.80, blinkCloseSpeed:0.018, blinkOpenSpeed:0.13, blinkEyeOffset:0.022,
+      blinkSquintDur:0.015, blinkSquintDepth:0.30, blinkLidBow:0.14,
+      showMouth:false, showBrows:true, showNose:false, mouthCurve:0, mouthWidth:100,
+      squashStretch:0.10,
+    },
+    colors: {
+      eyeColor:'#d8d6d0', pupilColor:'#0d0d0d', irisColor:'#404040',
+      glowColor:'#888888', lidColor:'#111114', browColor:'#888888',
+      canvasBg:'#0d0d0f', mouthColor:'#888888', mouthFillColor:'#080810',
+    },
+  },
+
+  d: {
+    name: 'Vivid',
+    params: {
+      eyeRx:80, eyeRy:82, eyeSpacing:215, eyeRotation:0,
+      pupilSize:0.34, irisSize:0.78, cornealSpecSize:0.14, cornealSpecOffset:0.32, cornealSpecAlpha:0.85,
+      browWidth:140, browThickness:13, browArch:14, browOffsetY:100,
+      lidOpenness:0.92, blinkCloseSpeed:0.020, blinkOpenSpeed:0.10, blinkEyeOffset:0.015,
+      blinkSquintDur:0.016, blinkSquintDepth:0.32, blinkLidBow:0.26,
+      showMouth:true, showBrows:true, showNose:false, mouthCurve:4, mouthWidth:130,
+      squashStretch:0.30,
+    },
+    colors: {
+      eyeColor:'#f0ede4', pupilColor:'#100c08', irisColor:'#3a7a60',
+      glowColor:'#30ffaa', lidColor:'#0a0a10', browColor:'#f0ede4',
+      canvasBg:'#0a0a10', mouthColor:'#f0ede4', mouthFillColor:'#080810',
+    },
+  },
+
+  e: {
+    name: 'Soft',
+    params: {
+      eyeRx:68, eyeRy:62, eyeSpacing:218, eyeRotation:0,
+      pupilSize:0.44, irisSize:0.70, cornealSpecSize:0.08, cornealSpecOffset:0.24, cornealSpecAlpha:0.50,
+      browWidth:125, browThickness:12, browArch:10, browOffsetY:88,
+      lidOpenness:0.78, blinkCloseSpeed:0.025, blinkOpenSpeed:0.14, blinkEyeOffset:0.020,
+      blinkSquintDur:0.020, blinkSquintDepth:0.38, blinkLidBow:0.28,
+      showMouth:true, showBrows:true, showNose:false, mouthCurve:3, mouthWidth:110,
+      squashStretch:0.18,
+    },
+    colors: {
+      eyeColor:'#e8e0d5', pupilColor:'#1c1410', irisColor:'#8a6850',
+      glowColor:'#d4a870', lidColor:'#161410', browColor:'#c8b898',
+      canvasBg:'#110f0e', mouthColor:'#c8b898', mouthFillColor:'#100e0d',
+    },
+  },
+
+  f: {
+    name: 'Mech',
+    params: {
+      eyeRx:78, eyeRy:52, eyeSpacing:225, eyeRotation:0,
+      pupilSize:0.36, irisSize:0.66, cornealSpecSize:0.05, cornealSpecOffset:0.35, cornealSpecAlpha:0.90,
+      browWidth:100, browThickness:10, browArch:4, browOffsetY:76,
+      lidOpenness:0.82, blinkCloseSpeed:0.015, blinkOpenSpeed:0.09, blinkEyeOffset:0.025,
+      blinkSquintDur:0.012, blinkSquintDepth:0.28, blinkLidBow:0.08,
+      showMouth:false, showBrows:true, showNose:false, mouthCurve:0, mouthWidth:110,
+      squashStretch:0.08,
+    },
+    colors: {
+      eyeColor:'#c8ccd4', pupilColor:'#08080c', irisColor:'#b86020',
+      glowColor:'#ff8020', lidColor:'#0c0c14', browColor:'#606878',
+      canvasBg:'#0c0c14', mouthColor:'#606878', mouthFillColor:'#080810',
+    },
+  },
+};
+
+// ── State ──
+let activeDesignSlot = 'a';
+const designFileHandles = {}; // slot -> FileSystemFileHandle (persists until page reload)
+
+// ── Load design from file (or fall back to bundled preset) ──
+async function loadDesign() {
+  const slot = activeDesignSlot;
+  try {
+    // Try File System Access API first (Chrome/Edge)
+    if (window.showOpenFilePicker) {
+      const [handle] = await window.showOpenFilePicker({
+        suggestedName: `face_${slot}.json`,
+        types: [{ description: 'Face design JSON', accept: { 'application/json': ['.json'] } }],
+        startIn: 'documents',
+      });
+      designFileHandles[slot] = handle;
+      const file = await handle.getFile();
+      const text = await file.text();
+      applyDesign(JSON.parse(text));
+      updateDesignSlotLabel(slot, handle.name.replace(/\.json$/, ''));
+    } else {
+      // Fallback: try fetching from designs/ folder
+      const res = await fetch(`designs/face_${slot}.json`);
+      if (!res.ok) throw new Error('not found');
+      applyDesign(await res.json());
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') return; // user cancelled picker
+    // Fall back to bundled preset
+    const preset = FACE_PRESETS[slot];
+    if (preset) {
+      applyDesign(preset);
+      console.log(`[designs] loaded bundled preset "${preset.name}" for slot ${slot.toUpperCase()}`);
+    }
+  }
+}
+
+// ── Save current visual design to file ──
+async function saveDesign() {
+  const slot = activeDesignSlot;
+  if (!confirm(`Save current face design to slot ${slot.toUpperCase()}?`)) return;
+
+  const design = captureDesign();
+  const json   = JSON.stringify(design, null, 2);
+
+  try {
+    if (window.showSaveFilePicker) {
+      // Reuse existing handle if we have one, otherwise open picker
+      let handle = designFileHandles[slot];
+      if (!handle) {
+        handle = await window.showSaveFilePicker({
+          suggestedName: `face_${slot}.json`,
+          types: [{ description: 'Face design JSON', accept: { 'application/json': ['.json'] } }],
+          startIn: 'documents',
+        });
+        designFileHandles[slot] = handle;
+      }
+      const writable = await handle.createWritable();
+      await writable.write(json);
+      await writable.close();
+      console.log(`[designs] saved slot ${slot.toUpperCase()} → ${handle.name}`);
+    } else {
+      // Fallback: trigger download
+      const a  = document.createElement('a');
+      a.href   = 'data:application/json;charset=utf-8,' + encodeURIComponent(json);
+      a.download = `face_${slot}.json`;
+      a.click();
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') return; // user cancelled
+    console.warn('[designs] save failed:', e);
+  }
+}
+
+// ── Update the small label under a slot button ──
+function updateDesignSlotLabel(slot, name) {
+  const el = document.getElementById(`design-label-${slot}`);
+  if (el) el.textContent = name || '';
+}
+
+// ── Build the 6 slot buttons ──
+function buildDesignPresetPanel() {
+  const container = document.getElementById('design-slot-btns');
+  if (!container) return;
+  ['a','b','c','d','e','f'].forEach(slot => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'flex:1;display:flex;flex-direction:column;align-items:center;gap:2px';
+
+    const btn = document.createElement('button');
+    btn.className = 'design-slot-btn' + (slot === activeDesignSlot ? ' active' : '');
+    btn.id        = `design-slot-${slot}`;
+    btn.textContent = slot.toUpperCase();
+    btn.title     = FACE_PRESETS[slot]?.name || slot.toUpperCase();
+    btn.onclick   = () => {
+      activeDesignSlot = slot;
+      document.querySelectorAll('.design-slot-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      // Load the preset immediately on slot select
+      applyDesign(FACE_PRESETS[slot]);
+    };
+
+    const label = document.createElement('div');
+    label.className = 'design-slot-label';
+    label.id        = `design-label-${slot}`;
+    label.textContent = FACE_PRESETS[slot]?.name || '';
+
+    wrap.appendChild(btn);
+    wrap.appendChild(label);
+    container.appendChild(wrap);
+  });
+}
+
 loadConfig();
 buildControlPanels();
 buildColorPanel();
+buildDesignPresetPanel();
 syncAllSliders();
 
 // ── Battery force-low checkbox ──
@@ -4419,6 +5022,32 @@ if (mobilCb) {
     window.mobilityEnabled = this.checked;
   });
 }
+
+// Heatmap toggle — the checkbox writes directly to window.three.setHeatmapVisible()
+// once the Three.js module is ready.  We defer via a small wrapper so the checkbox
+// works whether checked before or after the module initialises.
+const heatmapCb = document.getElementById('heatmap-visible');
+if (heatmapCb) {
+  heatmapCb.addEventListener('change', function() {
+    window.three?.setHeatmapVisible(this.checked);
+  });
+}
+
+// ── Session timer ──────────────────────────────────────────────────────────
+(function() {
+  const startMs = Date.now();
+  const el = document.getElementById('session-timer');
+  if (!el) return;
+  function tick() {
+    const s = Math.floor((Date.now() - startMs) / 1000);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    el.textContent = h + ':' + String(m).padStart(2,'0') + ':' + String(sec).padStart(2,'0');
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
 
 // Expose to Three.js module (const at top-level non-module script doesn't auto-assign to window)
 window.state  = state;
@@ -4806,6 +5435,37 @@ floor.rotation.x   = -Math.PI / 2;
 floor.receiveShadow = true;
 scene.add(floor);
 
+// ── Heatmap overlay — shows where the robot has been ──────────────────────
+// Canvas is SMEM_N × SMEM_N; each pixel = one spatial memory cell.
+// Rebuilt from spatialMemory at most once per second.
+const hmCanvas  = document.createElement('canvas');
+// Size is set after SMEM_N is defined (below), so we use a placeholder here
+// and resize it once constants are available.  We'll finalize in the
+// SMEM section that follows the robot setup.
+hmCanvas.width  = 64;   // overwritten below after SMEM_N is defined
+hmCanvas.height = 64;
+const hmCtx     = hmCanvas.getContext('2d');
+const hmTexture = new THREE.CanvasTexture(hmCanvas);
+hmTexture.magFilter = THREE.LinearFilter;
+hmTexture.minFilter = THREE.LinearFilter;
+
+// The heatmap plane covers exactly the driveable floor area (FLOOR_LIMIT × 2 each side).
+// Actual FLOOR_LIMIT value (13) is defined later, so we create the mesh here with a
+// placeholder size and rescale after constants are set.
+const hmMat  = new THREE.MeshBasicMaterial({
+  map:         hmTexture,
+  transparent: true,
+  depthWrite:  false,   // don't write to depth — floor shows through gaps
+  opacity:     1.0,
+});
+const hmMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), hmMat);
+hmMesh.rotation.x = -Math.PI / 2;
+hmMesh.position.y = 0.003;   // tiny float above floor to avoid z-fighting
+hmMesh.visible    = false;   // hidden by default; toggled by checkbox
+scene.add(hmMesh);
+
+let hmLastUpdate = -999; // gameTime of last heatmap redraw (forces initial draw)
+
 // ── Robot dimensions ──
 const C  = 1.20;   // cube size (head and body are both C × C × C)
 const WR = 0.46;   // wheel radius
@@ -4882,6 +5542,8 @@ let mobilityState    = 'hold';  // 'hold' | 'wander' | 'approach' | 'scan' | 're
 let mobilityGoal     = null;    // {x, z} in world space, or null
 let mobilityTimer    = 0;       // seconds spent in current wander leg
 let mobilityLegDone  = false;
+let lastWanderPOI    = null;    // POI object most recently arrived at
+let lastWanderTime   = -999;    // gameTime when we last arrived at a POI
 
 // Battery (fraction 0..1 where 1.0 = full charge)
 let battery          = 1.0;
@@ -4893,6 +5555,13 @@ const SMEM_RES  = 0.5;
 const SMEM_N    = Math.ceil(FLOOR_LIMIT * 2 / SMEM_RES);
 const spatialMemory = new Float32Array(SMEM_N * SMEM_N);
 let gameTime = 0; // running simulation time in seconds
+
+// Now that SMEM_N and FLOOR_LIMIT are defined, finalize the heatmap canvas + plane
+hmCanvas.width  = SMEM_N;
+hmCanvas.height = SMEM_N;
+const _hmFloorSize = FLOOR_LIMIT * 2;          // 26 m square
+hmMesh.geometry.dispose();
+hmMesh.geometry = new THREE.PlaneGeometry(_hmFloorSize, _hmFloorSize);
 
 // ── Resize ──
 function resize() {
@@ -4992,8 +5661,25 @@ window.pois = POI_INIT.map(({ x, y, z, s, label, category, color, affordances })
   elPov.style.display = 'none';
   container.appendChild(elPov);
 
-  return { mesh, salience: s, familiarity: 0, attention: 0, label, category, affordances: affordances || [], el, elPov, fillEl };
+  return { mesh, salience: s, familiarity: 0, attention: 0, label, category, affordances: affordances || [], el, elPov, fillEl, enabled: true };
 });
+
+// Enable or disable a POI by index. Hides its mesh and label; excludes it from
+// attention selection and wander scoring. If the robot is currently attending
+// this POI, attention is reset so it picks a new target immediately.
+window.setPOIEnabled = function(idx, enabled) {
+  const poi = (window.pois || [])[idx];
+  if (!poi) return;
+  poi.enabled = enabled;
+  poi.mesh.visible = enabled;
+  poi.el.style.display    = enabled ? '' : 'none';
+  poi.elPov.style.display = 'none'; // elPov visibility is managed by render loop
+  // If robot was attending this POI, reset so it re-picks
+  if (!enabled && state.poiIdx === idx) {
+    state.poiIdx             = -1;
+    state.attentionHoldTimer = 0;
+  }
+};
 
 // Apply any saved POI positions from localStorage (written by saveConfig in main script)
 try {
@@ -5142,11 +5828,12 @@ canvas3d.addEventListener('touchcancel', endDrag);
 
 // Map behavior name → target linear speed (m/s). 0 = stationary.
 function getMobilitySpeed() {
-  const behavior = window.state?.behavior || 'idle';
+  // state.attn is the active behavior key (state.behavior doesn't exist)
+  const behavior = window.state?.attn || 'idle';
   const map = {
-    resting: 0, sleepy: 0, idle: 0.25, curious: 0.45,
-    alert: 0, excited: 0.6, watching: 0, listening: 0,
-    attentive: 0.3, engaged: 0, searching: 0.35,
+    resting: 0, sleepy: 0.5, idle: 1.0, curious: 1.45,
+    alert: 1.2, excited: 1.6, watching: 1.15, listening: 1.15,
+    attentive: 1.3, engaged: 1.2, searching: 1.4,
   };
   return mobilityEnabled ? (map[behavior] ?? 0.25) : 0;
 }
@@ -5171,15 +5858,77 @@ function smemNovelty(x, z) {
   return Math.min(1, (gameTime - lastVisit) / 120);
 }
 
+// ── Heatmap rendering ─────────────────────────────────────────────────────
+// Converts spatialMemory → RGBA pixels on hmCanvas, then uploads to GPU.
+// Color encodes recency: yellow-white (fresh) → orange → red → transparent (old/never).
+// Called at most once per second from the render loop when the overlay is visible.
+function updateHeatmap() {
+  const imgData = hmCtx.createImageData(SMEM_N, SMEM_N);
+  const buf     = imgData.data;  // RGBA u8 array, length = SMEM_N * SMEM_N * 4
+  const FADE_SEC = 300;          // time (s) until a visited cell fully fades out
+
+  for (let r = 0; r < SMEM_N; r++) {
+    for (let c = 0; c < SMEM_N; c++) {
+      const memIdx  = r * SMEM_N + c;
+      const lastT   = spatialMemory[memIdx];
+
+      // No row flip needed: CanvasTexture flipY=true and PlaneGeometry rotation.x=-PI/2
+      // both invert V, so they cancel — smem row r maps directly to canvas row r.
+      const pixIdx  = (r * SMEM_N + c) * 4;
+
+      if (lastT === 0) {
+        // Never visited — fully transparent
+        buf[pixIdx + 3] = 0;
+        continue;
+      }
+
+      // age: 0 = just visited, 1 = fully faded
+      const age = Math.min(1, (gameTime - lastT) / FADE_SEC);
+
+      // Color ramp: fresh = 255,230,80 (yellow), mid = 255,80,20 (orange-red), old = 180,20,60 (deep red)
+      let R, G, B, A;
+      if (age < 0.4) {
+        // yellow → orange
+        const t = age / 0.4;
+        R = 255;
+        G = Math.round(230 - 150 * t);   // 230 → 80
+        B = Math.round(80  - 60  * t);   // 80  → 20
+      } else {
+        // orange → deep red
+        const t = (age - 0.4) / 0.6;
+        R = Math.round(255 - 75 * t);    // 255 → 180
+        G = Math.round(80  - 60 * t);    // 80  → 20
+        B = Math.round(20  + 40 * t);    // 20  → 60
+      }
+      // Alpha fades in the last 40% of the life so cells fade out smoothly
+      A = age < 0.6 ? 200 : Math.round(200 * (1 - (age - 0.6) / 0.4));
+
+      buf[pixIdx]     = R;
+      buf[pixIdx + 1] = G;
+      buf[pixIdx + 2] = B;
+      buf[pixIdx + 3] = A;
+    }
+  }
+
+  hmCtx.putImageData(imgData, 0, 0);
+  hmTexture.needsUpdate = true;
+}
+
 // Score a POI as a wander destination (higher = more desirable)
 function scorePOI(poi) {
-  // Never wander toward the charger dock
+  // Never wander toward disabled POIs or the charger dock
+  if (!poi.enabled) return 0;
   if (poi.category === 'charger') return 0;
   const dx = poi.mesh.position.x - drivePos.x;
   const dz = poi.mesh.position.z - drivePos.z;
   const dist = Math.sqrt(dx * dx + dz * dz) + 0.1;
   const novelty = smemNovelty(poi.mesh.position.x, poi.mesh.position.z);
-  return (poi.salience / (1 + poi.familiarity)) * novelty / (1 + dist * 0.1);
+  let score = (poi.salience / (1 + poi.familiarity)) * novelty / (1 + dist * 0.25);
+  // Suppress recently-visited POI for 90 s so the robot doesn't immediately loop back
+  if (poi === lastWanderPOI && (gameTime - lastWanderTime) < 90) {
+    score *= 0.05;
+  }
+  return score;
 }
 
 // Compute obstacle repulsion force at position (x, z)
@@ -5188,7 +5937,8 @@ function computeRepulsion(x, z) {
   let fx = 0, fz = 0;
   const pois = window.pois || [];
   for (const poi of pois) {
-    // People and pets are not treated as physical obstacles
+    // Skip disabled POIs and non-obstacles
+    if (!poi.enabled) continue;
     if (poi.category === 'person' || poi.category === 'pet') continue;
     const dx = x - poi.mesh.position.x;
     const dz = z - poi.mesh.position.z;
@@ -5248,11 +5998,14 @@ function pickWanderTarget() {
   }
   if (!best) {
     // Fallback: random point anywhere on the floor
+    lastWanderPOI  = null;
     return {
       x: (Math.random() * 2 - 1) * (FLOOR_LIMIT - 2),
       z: (Math.random() * 2 - 1) * (FLOOR_LIMIT - 2),
     };
   }
+  // Record which POI we're heading toward so scorePOI can suppress it on re-pick
+  lastWanderPOI = best;
   // Approach to within 1.5 m of the POI (don't walk into it)
   const dx = drivePos.x - best.mesh.position.x;
   const dz = drivePos.z - best.mesh.position.z;
@@ -5306,12 +6059,14 @@ function computeGazeFromBall() {
 // ── Shared tracking math — drives head/body/eyes toward a world point ──
 function trackWorldPoint(targetPos, dt, s, p) {
   const HEAD_SHARE   = 0.75;
-  const EYE_NORM_DEG = 15;
+  const EYE_NORM_DEG = 25; // degrees of residual angle that maps to full eye travel (wider = less extreme)
   const maxHead      = p.headRotationMax;
 
   // Sync body3DYaw from the physical drive heading so the head spring
   // correctly measures gaze angle relative to where the robot is actually facing.
-  s.body3DYaw = driveYaw * 180 / Math.PI;
+  // Normalize to -180..180 — driveYaw accumulates without wrapping so the raw
+  // value can be -2856° or more after the robot has turned many times.
+  s.body3DYaw = ((driveYaw * 180 / Math.PI) % 360 + 540) % 360 - 180;
 
   // Body spring constants (still used for body deadband tracking below)
   const bodyOmega = 2 * Math.PI * p.bodyHz;
@@ -5321,9 +6076,16 @@ function trackWorldPoint(targetPos, dt, s, p) {
 
   // ── Geometry: compute desired head yaw and pitch targets ──────────────────
 
-  // Yaw: head springs toward 75% of target, eyes cover the remaining 25%
-  const targetYawDeg  = Math.atan2(targetPos.x, targetPos.z) * 180 / Math.PI;
-  const relYawDeg     = targetYawDeg - s.body3DYaw;
+  // Yaw: head springs toward 75% of target, eyes cover the remaining 25%.
+  // Use robot position (drivePos) as the reference — NOT the world origin.
+  // When the robot has wandered, atan2(targetPos.x, targetPos.z) gives the angle
+  // from the origin, not from the robot, producing a totally wrong heading.
+  //
+  // IMPORTANT: driveYaw accumulates without normalization (keeps adding each rotation),
+  // so s.body3DYaw can be a large number like -2856°. Raw subtraction gives a huge
+  // relYawDeg that pins head and eyes to max. Normalize to -180..180 after subtraction.
+  const targetYawDeg  = Math.atan2(targetPos.x - drivePos.x, targetPos.z - drivePos.z) * 180 / Math.PI;
+  const relYawDeg     = ((targetYawDeg - s.body3DYaw) % 360 + 540) % 360 - 180;
   const headYawTarget = Math.max(-maxHead, Math.min(maxHead, relYawDeg * HEAD_SHARE));
 
   // Pitch: compute from head world position → target vector
@@ -5342,9 +6104,13 @@ function trackWorldPoint(targetPos, dt, s, p) {
     s.head3DPitch += (headPitchTarget - s.head3DPitch)  * Math.min(1, dt * 5);
   }
 
-  // Residual eye gaze covers the 25% not handled by the head
-  const remainingYaw   = relYawDeg   - s.head3DYaw;
-  const remainingPitch = totalPitchDeg - s.head3DPitch;
+  // Residual eye gaze covers the 25% not handled by the head.
+  // Use the HEAD TARGET (not current position) so eyes go straight to their
+  // final resting place and stay stable while the head motion plays out.
+  // Using s.head3DYaw caused eyes to shoot to the edge during anticipation
+  // wind-up (head moves backward first) and stay there until head settled.
+  const remainingYaw   = relYawDeg    - headYawTarget;
+  const remainingPitch = totalPitchDeg - headPitchTarget;
   const gazeXTarget = Math.max(-1, Math.min(1, remainingYaw   / EYE_NORM_DEG));
   const gazeYTarget = Math.max(-1, Math.min(1, remainingPitch / EYE_NORM_DEG));
 
@@ -5400,8 +6166,46 @@ function preUpdate(dt) {
     // Autonomous POI attention — drive system selected a target
     const pois = window.pois;
     if (pois && s.poiIdx >= 0 && s.poiIdx < pois.length) {
-      s.gazeTargetActive = true;
-      trackWorldPoint(pois[s.poiIdx].mesh.position, dt, s, p);
+      const _poi = pois[s.poiIdx];
+      // Release if POI is too far to the side for the head to track.
+      // headRotationMax = 25°; head saturates when relYaw > 33° (= maxHead / 0.75).
+      // Between 33–50° the head is pinned at max and eyes are driven to the face edge.
+      //
+      // Two-tier strategy:
+      //   MOVING (wander/approach): release POI at maxHead+10° (35°) and set
+      //     behaviorTimer to a negative cooldown. behaviorTimer is the gate that
+      //     controls when selectAttentionPOI() fires — attentionHoldTimer alone is
+      //     not enough because selectAttentionPOI overrides it immediately.
+      //
+      //   STATIONARY (hold/charging): keep poiIdx set so the body-turning code
+      //     (hold-mode slow spin) knows which direction to rotate the body. Don't
+      //     call trackWorldPoint — idle saccades run instead. Reset behaviorTimer
+      //     each frame to block selectAttentionPOI from overriding the POI while
+      //     the body is turning. Re-arm attentionHoldTimer so it doesn't expire
+      //     mid-turn. Once body turns enough that _relYaw < limit, tracking resumes.
+      const _poiYaw  = Math.atan2(_poi.mesh.position.x - drivePos.x,
+                                   _poi.mesh.position.z - drivePos.z) * 180 / Math.PI;
+      const _relYaw  = ((_poiYaw - driveYaw * 180 / Math.PI) + 540) % 360 - 180;
+      const _moving  = mobilityState !== 'hold' && mobilityState !== 'charging';
+      const _limit   = _moving ? p.headRotationMax + 10 : p.headRotationMax + 25;
+      if (Math.abs(_relYaw) > _limit) {
+        if (_moving) {
+          // Release entirely — can't compensate with body while moving
+          s.poiIdx = -1;
+          s.attentionHoldTimer = 0;
+          s.behaviorTimer = -1.0; // 1s pause so selectAttentionPOI doesn't re-pick immediately
+        } else {
+          // Stationary: keep poiIdx so hold-mode body-turning aims at the right POI
+          // Suppress selectAttentionPOI and hold-timer expiry while waiting for the
+          // body to rotate into range
+          s.attentionHoldTimer = Math.max(s.attentionHoldTimer, 0.5);
+          s.behaviorTimer = -0.5;
+          // gazeTargetActive stays false → idle saccades run while body turns
+        }
+      } else {
+        s.gazeTargetActive = true;
+        trackWorldPoint(_poi.mesh.position, dt, s, p);
+      }
     } else {
       // No active target — hand control back to idle saccade / micro-wander
       s.gazeTargetActive = false;
@@ -5411,7 +6215,13 @@ function preUpdate(dt) {
   // ── Drive integration — always runs, independent of gaze state ───────────
   // Runs every frame regardless of gaze state.
   gameTime += dt;
-  smemVisit(drivePos.x, drivePos.z); // stamp current cell as visited
+  // Stamp current cell plus immediate neighbours so the robot marks the area
+  // it's actually in, not just the single half-metre cell under its centre.
+  smemVisit(drivePos.x,              drivePos.z);
+  smemVisit(drivePos.x + SMEM_RES,   drivePos.z);
+  smemVisit(drivePos.x - SMEM_RES,   drivePos.z);
+  smemVisit(drivePos.x,              drivePos.z + SMEM_RES);
+  smemVisit(drivePos.x,              drivePos.z - SMEM_RES);
 
   // Battery management
   if (batteryForceLow) { battery = 0.08; batteryForceLow = false; }
@@ -5457,7 +6267,7 @@ function preUpdate(dt) {
       }
     } else if (speed > 0) {
       // Autonomous wander — pick a new goal when needed
-      if (!mobilityGoal || mobilityTimer > 15 || mobilityLegDone) {
+      if (!mobilityGoal || mobilityTimer > 45 || mobilityLegDone) {
         mobilityGoal    = pickWanderTarget();
         mobilityTimer   = 0;
         mobilityLegDone = false;
@@ -5465,7 +6275,15 @@ function preUpdate(dt) {
       }
       const { v, omega, arrived } = steerToward(mobilityGoal.x, mobilityGoal.z, speed);
       cmdV = v; cmdOmega = omega;
-      if (arrived) mobilityLegDone = true;
+      if (arrived) {
+        mobilityLegDone = true;
+        lastWanderTime  = gameTime; // start the 90 s suppression window
+        // Stamp the approach point and the target POI's cell as visited
+        smemVisit(mobilityGoal.x, mobilityGoal.z);
+        if (lastWanderPOI) {
+          smemVisit(lastWanderPOI.mesh.position.x, lastWanderPOI.mesh.position.z);
+        }
+      }
     } else {
       // Behavior calls for zero speed — hold position, gently face active POI
       mobilityState = 'hold';
@@ -5564,7 +6382,7 @@ function render() {
 
     pois.forEach((poi, i) => {
       const show = !!(p.showPOIs);
-      poi.mesh.visible = show;
+      poi.mesh.visible = show && poi.enabled;
       const isActive = s.poiIdx === i;
       const fam = poi.familiarity;
 
@@ -5613,7 +6431,7 @@ function render() {
       }
       const behind = _labelPos.z > 1;
       const opacity = isActive ? '1' : String(0.5 + (1 - fam) * 0.5);
-      poi.el.style.display = (show && !behind) ? 'block' : 'none';
+      poi.el.style.display = (poi.enabled && show && !behind) ? 'block' : 'none';
       poi.el.style.left    = `${sx}px`;
       poi.el.style.top     = `${sy}px`;
       poi.el.style.opacity = opacity;
@@ -5627,7 +6445,7 @@ function render() {
         const hw = cw / 2, hh = ch / 2;
         const px = (_labelPosPov.x * 0.5 + 0.5) * hw + hw;  // right half
         const py = (-_labelPosPov.y * 0.5 + 0.5) * hh;       // top half (y < hh)
-        poi.elPov.style.display = (show && !povBehind) ? 'block' : 'none';
+        poi.elPov.style.display = (poi.enabled && show && !povBehind) ? 'block' : 'none';
         poi.elPov.style.left    = `${px}px`;
         poi.elPov.style.top     = `${py}px`;
         poi.elPov.style.opacity = opacity;
@@ -5635,6 +6453,12 @@ function render() {
         poi.elPov.style.display = 'none';
       }
     });
+  }
+
+  // Refresh heatmap texture at most once per second when visible
+  if (hmMesh.visible && gameTime - hmLastUpdate >= 1.0) {
+    updateHeatmap();
+    hmLastUpdate = gameTime;
   }
 
   if (fourUpMode) {
@@ -5796,7 +6620,13 @@ function getRobotPose() {
   return { x: drivePos.x, y: 0, z: drivePos.z, yaw: driveYaw };
 }
 
-window.three = { preUpdate, render, resize, applyColors, setFourUpMode, setActiveView, getCameras, restoreCameras, getRobotPose };
+function setHeatmapVisible(on) {
+  hmMesh.visible = on;
+  // Force an immediate redraw when turning on so it doesn't wait up to 1 s
+  if (on) { updateHeatmap(); hmLastUpdate = gameTime; }
+}
+
+window.three = { preUpdate, render, resize, applyColors, setFourUpMode, setActiveView, getCameras, restoreCameras, getRobotPose, setHeatmapVisible };
 </script>
 
 </body>

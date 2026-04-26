@@ -33,7 +33,7 @@ The scene is pre-seeded with a named set of 3D markers. Each POI represents some
 
 ## Full-body attention
 
-When the drive system selects a POI, `trackWorldPoint(poi.position)` engages the full-body tracking system. Attention is distributed across head, body, and eyes via spring physics — the same system that handles manual ball drag.
+When the drive system selects a POI, `trackWorldPoint(poi.position)` engages the full-body tracking system. Attention is distributed across head (3-phase motion profile), body (drive kinematics heading), and eyes (gaze layer).
 
 | Actuator | Contribution | Notes |
 |----------|-------------|-------|
@@ -106,7 +106,7 @@ Drive system (pressure / behavior state)
     └──→ selectAttentionPOI() applies POI_BEHAVIOR_AFFINITY × novelty weight
          └──→ picks a POI index
               └──→ preUpdate() calls trackWorldPoint(poi.position)
-                   └──→ head / body / eye spring physics
+                   └──→ head motion profile + drive kinematics + eye gaze
 ```
 
-The drive system never writes directly to joint angles or eye targets. It selects a POI; the world model resolves the geometry; the spring physics produce the motion. Each layer owns exactly one concern.
+The drive system never writes directly to joint angles or eye targets. It selects a POI; the world model resolves the geometry; the motion system produces the movement. Each layer owns exactly one concern.

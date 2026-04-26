@@ -68,11 +68,11 @@ With drive ON:
    - Head moves to target without overshoot
 3. Click again — verify all behaviors restore to saved values
 
-### 3D body & spring physics
+### 3D body & head motion
 
-1. Drag the yellow ball — head tracks it with overshoot and arc tilt
-2. Release — body returns to idle wander with spring overshoot
-3. With principles OFF — drag ball and verify no overshoot, no arc tilt
+1. Drag the yellow ball — head tracks it with anticipation, S-curve move, and arc tilt
+2. Release — body returns to idle wander
+3. With principles OFF — drag ball and verify no anticipation/overshoot, no arc tilt
 4. Adjust **Head arc tilt** slider — verify head tilts into turns more or less
 
 ### Visual overlays
@@ -405,9 +405,9 @@ async def test_all_behaviors_accepted():
 | Micro-expressions | ✓ | low | high | medium |
 | Principles toggle | ✓ | medium | high | low |
 | WebSocket commands | ✓ | n/a | low | high |
-| Spring/arc physics | ✓ | n/a | high (snapshot) | n/a |
+| Head motion profile | ✓ | n/a | high (snapshot) | n/a |
 
-Logic-heavy areas (compositor, drive, enforcer) are most valuable as unit tests. Visual/timing-dependent areas (micro-expressions, principles, spring physics) are best verified with browser tests. WebSocket commands are best tested end-to-end with a live server.
+Logic-heavy areas (compositor, drive, enforcer) are most valuable as unit tests. Visual/timing-dependent areas (micro-expressions, principles, head motion) are best verified with browser tests. WebSocket commands are best tested end-to-end with a live server.
 
 ---
 

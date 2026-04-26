@@ -48,6 +48,7 @@ def load_packets(path: str) -> list:
                 print(f"  skipping line {lineno}: {e}")
                 continue
             if pkt.get("type") == "state":
+                pkt.pop("_rx", None)  # strip verbose-mode recorder timestamp
                 packets.append(pkt)
     return packets
 

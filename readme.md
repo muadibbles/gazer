@@ -28,12 +28,16 @@ That's enough to watch the full system in action — no camera or microphone nee
 - **Transition blending** — each state defines its own blend-in duration and easing curve; pair-specific overrides for dramatic shifts; `interrupted` snaps in and auto-returns after 0.5s
 - **Blink system** — natural blink timing per behavior, with anticipation and follow-through spring
 - **3D robot body** — Three.js scene; face canvas mapped as a texture on the head
-- **Spring physics** — head and body rotation use underdamped spring dynamics: natural ease-in, ease-out, and slight overshoot on every movement
+- **3-phase head motion** — anticipation wind-up → S-curve move → overshoot settle; only fires for turns above a tunable threshold; all parameters exposed in the UI
 - **Arc motion in 3D** — head tilts into yaw turns, body leans during rotation; motion traces curves through space, not flat angular sweeps
-- **Multi-camera views** — Face / POV / Ceiling / Perspective and 4-up grid; POV camera mounts at the robot eye and shows POI labels
+- **Multi-camera views** — Face / POV / Ceiling / Perspective / Travel Cam and 4-up grid; POV camera mounts at the robot eye; Travel Cam is fully orbit-controllable and follows the robot as it moves
+- **Mobility system** — differential drive with realistic arc turns; robot wanders autonomously when curious/alert, stands and looks around when idle, holds still when resting; obstacle avoidance via potential fields; spatial memory biases destinations toward unvisited areas
+- **Battery system** — drains from movement and mental activity; robot finishes current leg then returns to the Charger POI when low; critical level triggers immediate return; sleeps on charger 9 pm–7 am
 - **Drive system** — pressure-based behavior selection; rule engine fires on events (`face_detected`, `speech_start`, `startle`, etc.); novelty decay prevents getting stuck
 - **Task system** — queued directed interactions; utility (transactional) and social (open-ended) modes; interrupt support
-- **World model** — 8 named POIs (Person, Child, Cat, Dog, TV, Window, Food Bowl, Front Door); draggable in 3D scene; familiarity and attention tracking per POI
+- **World model** — 9 named POIs (Person, Child, Cat, Dog, TV, Window, Food Bowl, Front Door, Charger); draggable in 3D scene; familiarity and attention tracking per POI
+- **Floor heatmap** — canvas texture overlaid on the floor showing where the robot has travelled; yellow = fresh, fades to red then transparent over 5 min; toggle via "Show heatmap" checkbox
+- **Session timer** — elapsed time display in the left panel from page load
 - **State broadcast** — engine serializes full state at 20 Hz over WebSocket; Renderer Mode lets a second browser tab display state received from the network rather than computing it locally
 
 ---
@@ -65,14 +69,23 @@ Drive system
 └── POI world model    — familiarity, attention, 3D positions, affordances
 
 BodyController (Three.js)
-├── headGroup          — underdamped spring yaw/pitch + arc roll tilt
-├── robot body         — spring yaw + arc pitch lean
+├── headGroup          — 3-phase motion profile (ant → S-curve → overshoot) + arc roll tilt
+├── upperBody          — body+head pitch group; wheels always stay grounded
+├── robot body         — heading driven by differential drive; arc pitch lean
 └── ball               — draggable gaze target; Y-handle for height
+
+Mobility
+├── drive kinematics   — v_L = v − ω·d/2, v_R = v + ω·d/2; realistic arc turns
+├── state machine      — hold → wander → approach → scan → returning → charging
+├── spatial memory     — 0.5 m grid; timestamps last visit per cell; novelty-biased targeting
+├── obstacle avoidance — potential-field repulsion from object POIs and floor boundary
+└── battery            — drains from movement + activity; routes to Charger POI when low
 
 Cameras
 ├── face cam           — 2D canvas overlay (top-left in 4-up)
 ├── POV cam            — mounts at robot eye, gaze-direction frustum
 ├── ceiling cam        — top-down, pan+zoom only
+├── travel cam         — orbit-controlled, follows robot as it moves
 └── perspective cam    — orbit-controlled
 ```
 
@@ -239,16 +252,22 @@ All exposed in the UI panel:
 | `pupilSize` | Pupil radius relative to iris |
 | `blinkInterval` | Seconds between blinks (modified by behavior) |
 | `transitionDur` | Default compositor blend duration |
-| `headRotationMax` | Degrees — max 3D head yaw |
-| `head3DSpeed` | Head spring stiffness scale (higher = snappier) |
-| `headSpringDamp` | Head spring damping (lower = more overshoot) |
+| `headRotationMax` | Degrees — max head yaw offset from body heading |
+| `headMoveSpeed` | deg/s — how fast the head sweeps to a new target |
+| `headThreshold` | Degrees — minimum turn size that triggers anticipation/overshoot |
+| `headAntAmt` | Anticipation wind-up as a fraction of turn distance (0 = off) |
+| `headAntDur` | Duration of the anticipation phase in seconds |
+| `headOvAmt` | Overshoot distance as a fraction of turn distance (0 = off) |
+| `headOvDur` | Duration of the overshoot settle phase in seconds |
 | `headArcFactor` | Head tilt into yaw turns (0 = off) |
-| `bodyRotationMax` | Degrees — max 3D body yaw |
-| `body3DSpeed` | Body spring stiffness scale |
-| `bodySpringDamp` | Body spring damping |
-| `bodyArcFactor` | Body lean into rotation (0 = off) |
+| `bodyRotationMax` | Degrees — max body yaw offset (gaze layer, not drive heading) |
+| `bodyArcFactor` | Body lean into turns (0 = off) |
 | `ballTrackTimeout` | Seconds before reverting to idle after drag |
 | `squashStretch` | Eye deformation amount during saccades (0 = off) |
+| `attentionHoldMin` | Minimum seconds the robot dwells on each POI (default 10 s) |
+| `attentionHoldMax` | Maximum seconds the robot dwells on each POI (default 25 s) |
+| `driveHysteresis` | Pressure margin required to switch behavior states |
+| `driveNoveltyDecay` | Pressure lost per second on the currently active state |
 
 ---
 
